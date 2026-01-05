@@ -43,7 +43,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 # 创建可执行文件
-add_executable(${PROJECT_NAME} WIN32
+add_executable(${PROJECT_NAME}
     main.cpp
     database.cpp
     database.h
@@ -62,6 +62,12 @@ qt_add_qml_module(${PROJECT_NAME}
         qml/GroupTree.qml
         qml/ImageList.qml
         qml/ImageViewer.qml
+)
+
+qt_add_resources(${PROJECT_NAME} "image_resources"
+    PREFIX "/assets"
+    FILES
+        shaders/qsb/transitions.frag.qsb
 )
 
 # 启用QML编译器，减少运行时依赖和提高性能

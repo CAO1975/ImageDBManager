@@ -34,6 +34,17 @@ Item {
     property point lastMousePos: Qt.point(0, 0)
     property point imageOffset: Qt.point(0, 0)
     
+    // 添加着色器过渡相关属性
+    property bool useShaderTransition: true
+    property real shaderTransitionProgress: 0
+    property int shaderEffectType: 0  // 0 = 溶解
+    
+    // 着色器属性中间变量，避免命名冲突
+    property real shaderProgress: 0
+    property int shaderEffectTypeValue: 0
+    
+
+    
     function loadImage(imageId) {
         if (imageId === currentImageId && !transitioning) return
         if (transitioning && imageId === newImageId) return
@@ -45,6 +56,11 @@ Item {
             currentImageId = imageId
             currentImage = imageUrl
             currentImageItem.source = currentImage || ""
+            // 确保图片可见
+            currentImageItem.visible = true
+            nextImageItem.visible = false  // 隐藏下一张图片
+            currentImageItem.opacity = 1.0
+            nextImageItem.opacity = 0.0
             resetTransform()
             return
         }
@@ -59,12 +75,20 @@ Item {
         flipAnimation.stop(); flipReverseAnimation.stop(); flipXDownAnimation.stop(); flipXUpAnimation.stop(); flipXTopAnimation.stop(); flipXBottomAnimation.stop()
         scaleTransitionAnimation.stop(); flipDiagonalAnimation.stop(); flipDiagonalReverseAnimation.stop(); flipYLeftAnimation.stop(); flipYRightAnimation.stop()
         
+        // 停止着色器过渡定时器
+        updateTimer.stop();
+        
         if (transitioning) endTransition()
         
         if (transitionDuration === 0) {
             currentImageId = imageId
             currentImage = imageUrl
             currentImageItem.source = currentImage || ""
+            // 确保图片可见
+            currentImageItem.visible = true
+            nextImageItem.visible = true
+            currentImageItem.opacity = 1.0
+            nextImageItem.opacity = 0.0
             resetTransform()
             newImageId = -1
             nextImage = null
@@ -74,7 +98,11 @@ Item {
             nextImage = imageUrl
             
             var selectedTransition = transitionType
-            if (selectedTransition === -1) selectedTransition = Math.floor(Math.random() * 26)
+            if (selectedTransition === -1) {
+                // 随机选择过渡效果，但排除着色器过渡（26），因为那是专门的溶解效果
+                // 随机范围是0-25，对应26种普通过渡效果
+                selectedTransition = Math.floor(Math.random() * 26);  // 0-25
+            }
             
             resetTransform()
             
@@ -90,38 +118,64 @@ Item {
                 nextImageItem.visible = true;
             } else {
                 nextImageItem.opacity = 0.0;
+                nextImageItem.visible = true;  // 确保图片项可见，即使透明度为0
             }
             
             currentImageItem.source = currentImage || ""; nextImageItem.source = nextImage || ""
             
-            switch(selectedTransition) {
-                case 0: fadeAnimation.start(); break
-                case 1: slideLeftAnimation.start(); break
-                case 2: slideRightAnimation.start(); break
-                case 3: scaleAnimation.start(); break
-                case 4: fadeScaleAnimation.start(); break
-                case 5: rotateAnimation.start(); break
-                case 6: rotateRightAnimation.start(); break
-                case 7: rotateLeft180Animation.start(); break
-                case 8: rotateRight180Animation.start(); break
-                case 9: slideUpDownAnimation.start(); break
-                case 10: slideDownUpAnimation.start(); break
-                case 11: slideLeftDownToRightUpAnimation.start(); break
-                case 12: slideRightUpToLeftDownAnimation.start(); break
-                case 13: slideLeftUpToRightDownAnimation.start(); break
-                case 14: slideRightDownToLeftUpAnimation.start(); break
-                case 15: flipAnimation.start(); break
-                case 16: flipReverseAnimation.start(); break
-                case 17: flipXDownAnimation.start(); break
-                case 18: flipXUpAnimation.start(); break
-                case 19: scaleTransitionAnimation.start(); break
-                case 20: flipDiagonalAnimation.start(); break
-                case 21: flipDiagonalReverseAnimation.start(); break
-                case 22: flipXTopAnimation.start(); break
-                case 23: flipXBottomAnimation.start(); break
-                case 24: flipYLeftAnimation.start(); break
-                case 25: flipYRightAnimation.start(); break
-                default: fadeAnimation.start(); break
+            // 如果是27（即随机选择时的最大值）或26，则使用着色器过渡（溶解效果）
+            if (selectedTransition === 26) {  // 溶解效果在Main.qml的ComboBox中是索引27，对应transitionType为26
+                // 设置着色器过渡效果类型
+                shaderEffectType = 0;  // 溶解效果
+                shaderEffectTypeValue = shaderEffectType;  // 更新中间变量
+                console.log("Starting shader transition: selectedTransition=", selectedTransition, "effectType=", shaderEffectType, "transitionProgress=", shaderTransition.transitionProgress)
+                // 显示着色器过渡组件，将普通图片项隐藏（但保持ShaderEffectSource可见）
+                shaderTransition.visible = true
+                currentImageItem.visible = true  // 确保源图片可见，以便ShaderEffectSource可以捕获
+                nextImageItem.visible = true   // 确保目标图片可见，以便ShaderEffectSource可以捕获
+                currentImageItem.opacity = 0  // 设置为透明，只显示着色器效果
+                nextImageItem.opacity = 0   // 设置为透明，只显示着色器效果
+                
+                // 直接启动定时器来控制过渡，而不是依赖动画
+                updateTimer.start();
+                console.log("Shader transition timer started")
+            } else {
+                // 对于普通动画，确保着色器组件隐藏，图片项透明度正确
+                shaderTransition.visible = false
+                currentImageItem.visible = true
+                nextImageItem.visible = true
+                currentImageItem.opacity = 1.0
+                nextImageItem.opacity = 0.0
+                
+                switch(selectedTransition) {
+                    case 0: fadeAnimation.start(); break
+                    case 1: slideLeftAnimation.start(); break
+                    case 2: slideRightAnimation.start(); break
+                    case 3: scaleAnimation.start(); break
+                    case 4: fadeScaleAnimation.start(); break
+                    case 5: rotateAnimation.start(); break
+                    case 6: rotateRightAnimation.start(); break
+                    case 7: rotateLeft180Animation.start(); break
+                    case 8: rotateRight180Animation.start(); break
+                    case 9: slideUpDownAnimation.start(); break
+                    case 10: slideDownUpAnimation.start(); break
+                    case 11: slideLeftDownToRightUpAnimation.start(); break
+                    case 12: slideRightUpToLeftDownAnimation.start(); break
+                    case 13: slideLeftUpToRightDownAnimation.start(); break
+                    case 14: slideRightDownToLeftUpAnimation.start(); break
+                    case 15: flipAnimation.start(); break
+                    case 16: flipReverseAnimation.start(); break
+                    case 17: flipXDownAnimation.start(); break
+                    case 18: flipXUpAnimation.start(); break
+                    case 19: scaleTransitionAnimation.start(); break
+                    case 20: flipDiagonalAnimation.start(); break
+                    case 21: flipDiagonalReverseAnimation.start(); break
+                    case 22: flipXTopAnimation.start(); break
+                    case 23: flipXBottomAnimation.start(); break
+                    case 24: flipYLeftAnimation.start(); break
+                    case 25: flipYRightAnimation.start(); break
+                    default: fadeAnimation.start(); break
+                }
             }
         }
     }
@@ -150,6 +204,17 @@ Item {
         nextImageItem.x = Qt.binding(function() { return imageOffset.x })
         nextImageItem.y = Qt.binding(function() { return imageOffset.y })
         nextImageItem.scale = Qt.binding(function() { return scaleFactor })
+        
+        // 重置着色器过渡进度
+        shaderTransition.transitionProgress = 0
+        updateTimer.stop();  // 停止更新定时器
+        console.log("Ending shader transition, resetting transitionProgress to", shaderTransition.transitionProgress, "for effectType", shaderEffectType)
+        // 隐藏着色器过渡组件，显示普通图片项
+        shaderTransition.visible = false
+        currentImageItem.visible = true  // 确保当前图片可见
+        nextImageItem.visible = false  // 隐藏下一张图片
+        currentImageItem.opacity = 1.0
+        nextImageItem.opacity = 0.0  // 转换结束后隐藏下一张图片
     }
     
     // UI结构 - 背景已在组件顶部定义，包含圆角和边框
@@ -169,7 +234,7 @@ Item {
             opacity: 1.0
             x: imageOffset.x; y: imageOffset.y; scale: scaleFactor
             transformOrigin: Item.Center
-            z: 1
+            z: -1  // 降低z值，确保着色器在上面
             
             // 旋转变换 - 同时支持Y轴和X轴翻转
             transform: [
@@ -192,7 +257,7 @@ Item {
             opacity: 0.0
             x: imageOffset.x; y: imageOffset.y; scale: scaleFactor
             transformOrigin: Item.Center
-            z: 0
+            z: -1  // 降低z值，确保着色器在上面
             
             // 旋转变换 - 同时支持Y轴和X轴翻转
             transform: [
@@ -204,6 +269,74 @@ Item {
                     angle: 0
                 }
             ]
+        }
+        
+        // 着色器过渡效果
+        ShaderEffect {
+            id: shaderTransition
+            anchors.fill: parent
+            z: 2  // 确保着色器在图片之上
+            visible: false  // 默认不可见，只在需要时使用
+            
+            // ShaderEffectSource 用于捕获当前图片和下一张图片
+            property variant currentSource: ShaderEffectSource {
+                id: currentSource
+                sourceItem: currentImageItem
+                hideSource: false  // 设置为false，避免隐藏源图像
+                live: true
+                sourceRect: Qt.rect(0, 0, imageContainer.width, imageContainer.height)
+            }
+            
+            property variant nextSource: ShaderEffectSource {
+                id: nextSource
+                sourceItem: nextImageItem
+                hideSource: false  // 设置为false，避免隐藏源图像
+                live: true
+                sourceRect: Qt.rect(0, 0, imageContainer.width, imageContainer.height)
+            }
+            
+            // 过渡参数
+            property real transitionProgress: 0
+            
+            // 指定着色器文件路径
+            fragmentShader: "qrc:/assets/shaders/qsb/transitions.frag.qsb"
+            
+            // 添加调试信息
+            Component.onCompleted: {
+                console.log("ShaderEffect loaded, fragmentShader path: " + fragmentShader)
+                
+                // 检查着色器是否加载成功
+                if (fragmentShader) {
+                    console.log("Fragment shader loaded successfully")
+                    console.log("ShaderEffect status:", status)
+                } else {
+                    console.log("ERROR: Fragment shader failed to load")
+                }
+                
+                // 验证着色器源是否正确设置
+                console.log("ShaderEffect source properties set")
+            }
+            
+            // 将图片源传递给着色器
+            property variant from: currentSource
+            property variant to: nextSource
+            
+            // 将QML属性映射到着色器uniform变量
+            // 着色器中使用progress和effectType作为uniform变量
+            property real progress: transitionProgress
+            property int effectType: shaderEffectTypeValue
+            
+            // 监听状态变化
+            onStatusChanged: {
+                console.log("ShaderEffect status changed:", status)
+            }
+            
+            // 监听日志变化
+            onLogChanged: {
+                if (log && log.length > 0) {
+                    console.log("ShaderEffect log:", log)
+                }
+            }
         }
         
         MouseArea {
@@ -1236,6 +1369,61 @@ Item {
                 currentRotation.origin.x = currentImageItem.width / 2;
                 nextRotation.origin.x = nextImageItem.width / 2;
                 endTransition();
+            }
+        }
+    }
+    
+    // 着色器过渡动画 - 用于控制着色器过渡进度
+    NumberAnimation {
+        id: shaderTransitionAnimation
+        target: shaderTransition
+        property: "transitionProgress"
+        from: 0
+        to: 1
+        duration: transitionDuration
+        easing.type: Easing.InOutQuad
+        
+        onRunningChanged: {
+            if (running) {
+                console.log("Shader transition animation started, transitionProgress:", shaderTransition.transitionProgress)
+                // 启动定时器来更新progress值，确保着色器参数正确更新
+                updateTimer.start();
+            } else {
+                console.log("Shader transition animation finished, transitionProgress:", shaderTransition.transitionProgress)
+                updateTimer.stop();
+            }
+        }
+    }
+    
+    // 定时器用于更新着色器属性
+    Timer {
+        id: updateTimer
+        interval: 16  // 约60 FPS
+        running: false
+        repeat: true
+        property real startTime: 0
+        onTriggered: {
+            var elapsed = Date.now() - startTime
+            var duration = transitionDuration
+            var t = Math.min(elapsed / duration, 1.0)
+            
+            // 使用缓动函数
+            var easeT = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+            
+            // 直接更新着色器的progress属性
+            shaderTransition.transitionProgress = easeT
+            
+            console.log("Progress updated:", easeT.toFixed(2))
+            
+            if (t >= 1.0) {
+                updateTimer.stop()
+                endTransition()
+            }
+        }
+        
+        onRunningChanged: {
+            if (running) {
+                startTime = Date.now()
             }
         }
     }
