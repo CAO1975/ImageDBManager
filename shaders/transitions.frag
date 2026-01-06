@@ -10,6 +10,7 @@ layout(std140, binding = 0) uniform buf {
     float qt_Opacity;
     float progress;
     int effectType;  // 效果类型: 0=溶解, 1=马赛克, 2=波纹, 3=水波, 4=从左向右擦除, 5=从右向左擦除, 6=从上向下擦除, 7=从下向上擦除, 8=X轴窗帘, 9=Y轴窗帘, 10=故障, 11=旋转, 12=拉伸, 13=百叶窗
+    vec3 backgroundColor;  // 背景色 (RGB)
 };
 
 // Samplers
@@ -241,9 +242,17 @@ void main() {
         }
     }
 
-    // 确保 alpha 始终为 1
-    colorFrom.a = 1.0;
-    colorTo.a = 1.0;
+    // 确保透明区域显示背景色
+    if (colorFrom.a < 0.01) {
+        colorFrom = vec4(backgroundColor, 1.0);
+    } else {
+        colorFrom.a = 1.0;
+    }
+    if (colorTo.a < 0.01) {
+        colorTo = vec4(backgroundColor, 1.0);
+    } else {
+        colorTo.a = 1.0;
+    }
 
     // 混合两张图片
     vec4 finalColor = mix(colorFrom, colorTo, mixFactor);

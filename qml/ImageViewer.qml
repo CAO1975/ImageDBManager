@@ -99,9 +99,10 @@ Item {
             
             var selectedTransition = transitionType
             if (selectedTransition === -1) {
-                // 随机选择过渡效果，但排除着色器过渡（26），因为那是专门的溶解效果
-                // 随机范围是0-25，对应26种普通过渡效果
-                selectedTransition = Math.floor(Math.random() * 26);  // 0-25
+                // 随机选择过渡效果，范围0-39（40种效果）
+                // 0-25: 26种普通过渡效果
+                // 26-39: 14种着色器过渡效果
+                selectedTransition = Math.floor(Math.random() * 40);
             }
             
             resetTransform()
@@ -112,29 +113,34 @@ Item {
             nextImageItem.scale = 1.0; nextImageItem.rotation = 0
             
             // 对于随机点过渡效果，需要确保两张图片都可见
-            if (selectedTransition === 26) {
+            if (selectedTransition >= 26 && selectedTransition <= 39) {
+                // 着色器过渡：26-39
                 nextImageItem.opacity = 1.0;
                 currentImageItem.visible = true;
                 nextImageItem.visible = true;
             } else {
+                // 普通过渡：0-25
                 nextImageItem.opacity = 0.0;
                 nextImageItem.visible = true;  // 确保图片项可见，即使透明度为0
             }
-            
+
             currentImageItem.source = currentImage || ""; nextImageItem.source = nextImage || ""
-            
-            // 如果是27（即随机选择时的最大值）或26，则使用着色器过渡（溶解效果）
-            if (selectedTransition === 26) {  // 溶解效果在Main.qml的ComboBox中是索引27，对应transitionType为26
-                // 设置着色器过渡效果类型
-                shaderEffectType = 0;  // 溶解效果
+
+            // 如果是26-39，则使用着色器过渡
+            if (selectedTransition >= 26 && selectedTransition <= 39) {
+                // 设置着色器过渡效果类型：0-13
+                var shaderEffectIndex = selectedTransition - 26;  // 映射到着色器效果索引0-13
+                shaderEffectType = shaderEffectIndex;
+                shaderEffectTypeValue = shaderEffectIndex;
+                console.log("Starting shader transition: selectedTransition=", selectedTransition, "effectType=", shaderEffectType, "transitionProgress=", shaderEffectItem.transitionProgress)
                 shaderEffectTypeValue = shaderEffectType;  // 更新中间变量
                 console.log("Starting shader transition: selectedTransition=", selectedTransition, "effectType=", shaderEffectType, "transitionProgress=", shaderTransition.transitionProgress)
                 // 显示着色器过渡组件，将普通图片项隐藏（但保持ShaderEffectSource可见）
                 shaderTransition.visible = true
                 currentImageItem.visible = true  // 确保源图片可见，以便ShaderEffectSource可以捕获
                 nextImageItem.visible = true   // 确保目标图片可见，以便ShaderEffectSource可以捕获
-                currentImageItem.opacity = 0  // 设置为透明，只显示着色器效果
-                nextImageItem.opacity = 0   // 设置为透明，只显示着色器效果
+                currentImageItem.opacity = 1.0  // 保持不透明，确保ShaderEffectSource能捕获有效纹理
+                nextImageItem.opacity = 1.0   // 保持不透明，确保ShaderEffectSource能捕获有效纹理
                 
                 // 直接启动定时器来控制过渡，而不是依赖动画
                 updateTimer.start();
@@ -206,9 +212,9 @@ Item {
         nextImageItem.scale = Qt.binding(function() { return scaleFactor })
         
         // 重置着色器过渡进度
-        shaderTransition.transitionProgress = 0
+        shaderEffectItem.transitionProgress = 0
         updateTimer.stop();  // 停止更新定时器
-        console.log("Ending shader transition, resetting transitionProgress to", shaderTransition.transitionProgress, "for effectType", shaderEffectType)
+        console.log("Ending shader transition, resetting transitionProgress to", shaderEffectItem.transitionProgress, "for effectType", shaderEffectType)
         // 隐藏着色器过渡组件，显示普通图片项
         shaderTransition.visible = false
         currentImageItem.visible = true  // 确保当前图片可见
@@ -272,11 +278,26 @@ Item {
         }
         
         // 着色器过渡效果
-        ShaderEffect {
+        Item {
             id: shaderTransition
             anchors.fill: parent
             z: 2  // 确保着色器在图片之上
             visible: false  // 默认不可见，只在需要时使用
+
+            // 着色器边框（圆角）
+            Rectangle {
+                anchors.fill: parent
+                color: "transparent"
+                border.color: customAccent
+                border.width: 1
+                radius: 8
+                z: 1  // 边框在着色器之上
+            }
+
+            ShaderEffect {
+                id: shaderEffectItem
+                anchors.fill: parent
+                z: 0  // 着色器在边框之下
             
             // ShaderEffectSource 用于捕获当前图片和下一张图片
             property variant currentSource: ShaderEffectSource {
@@ -298,43 +319,45 @@ Item {
             // 过渡参数
             property real transitionProgress: 0
             
-            // 指定着色器文件路径
-            fragmentShader: "qrc:/assets/shaders/qsb/transitions.frag.qsb"
-            
-            // 添加调试信息
-            Component.onCompleted: {
-                console.log("ShaderEffect loaded, fragmentShader path: " + fragmentShader)
-                
-                // 检查着色器是否加载成功
-                if (fragmentShader) {
-                    console.log("Fragment shader loaded successfully")
-                    console.log("ShaderEffect status:", status)
-                } else {
-                    console.log("ERROR: Fragment shader failed to load")
+                // 指定着色器文件路径
+                fragmentShader: "qrc:/assets/shaders/qsb/transitions.frag.qsb"
+
+                // 添加调试信息
+                Component.onCompleted: {
+                    console.log("ShaderEffect loaded, fragmentShader path: " + fragmentShader)
+
+                    // 检查着色器是否加载成功
+                    if (fragmentShader) {
+                        console.log("Fragment shader loaded successfully")
+                        console.log("ShaderEffect status:", status)
+                    } else {
+                        console.log("ERROR: Fragment shader failed to load")
+                    }
+
+                    // 验证着色器源是否正确设置
+                    console.log("ShaderEffect source properties set")
                 }
-                
-                // 验证着色器源是否正确设置
-                console.log("ShaderEffect source properties set")
-            }
-            
-            // 将图片源传递给着色器
-            property variant from: currentSource
-            property variant to: nextSource
-            
-            // 将QML属性映射到着色器uniform变量
-            // 着色器中使用progress和effectType作为uniform变量
-            property real progress: transitionProgress
-            property int effectType: shaderEffectTypeValue
-            
-            // 监听状态变化
-            onStatusChanged: {
-                console.log("ShaderEffect status changed:", status)
-            }
-            
-            // 监听日志变化
-            onLogChanged: {
-                if (log && log.length > 0) {
-                    console.log("ShaderEffect log:", log)
+
+                // 将图片源传递给着色器
+                property variant from: currentSource
+                property variant to: nextSource
+
+                // 将QML属性映射到着色器uniform变量
+                // 着色器中使用progress和effectType作为uniform变量
+                property real progress: transitionProgress
+                property int effectType: shaderEffectTypeValue
+                property vector3d backgroundColor: Qt.vector3d(customBackground.r, customBackground.g, customBackground.b)
+
+                // 监听状态变化
+                onStatusChanged: {
+                    console.log("ShaderEffect status changed:", status)
+                }
+
+                // 监听日志变化
+                onLogChanged: {
+                    if (log && log.length > 0) {
+                        console.log("ShaderEffect log:", log)
+                    }
                 }
             }
         }
@@ -1406,12 +1429,13 @@ Item {
             var elapsed = Date.now() - startTime
             var duration = transitionDuration
             var t = Math.min(elapsed / duration, 1.0)
-            
+
             // 使用缓动函数
             var easeT = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-            
+
             // 直接更新着色器的progress属性
-            shaderTransition.transitionProgress = easeT
+            // 注意：现在需要访问内部的ShaderEffect对象
+            shaderEffectItem.transitionProgress = easeT
             
             console.log("Progress updated:", easeT.toFixed(2))
             

@@ -139,8 +139,10 @@ ApplicationWindow {
         let transValue = database.getSetting("QTtrans", "0")
         transitionComboBox.currentIndex = parseInt(transValue)
         if (transitionComboBox.currentIndex === 0) {
+            // 随机模式
             imageViewer.transitionType = -1
         } else {
+            // 所有过渡效果（包括普通和着色器）：transitionType = currentIndex - 1
             imageViewer.transitionType = transitionComboBox.currentIndex - 1
         }
         
@@ -758,11 +760,17 @@ ApplicationWindow {
                 
                 ComboBox {
                     id: transitionComboBox
-                    Layout.preferredHeight: 28; Layout.preferredWidth: 150
+                    Layout.preferredHeight: 28; Layout.preferredWidth: 180
                     Layout.alignment: Qt.AlignVCenter
-                    model: ["随机", "淡入淡出", "向左滑动", "向右滑动", "缩放", "淡入淡出+缩放", 
-                           "向左旋转90°", "向右旋转90°", "向左旋转180°", "向右旋转180°", "上滑下滑", "下滑上滑", 
-                           "左下向右上", "右上向左下", "左上向右下", "右下向左上", "翻转", "反向翻转", "上下翻转", "上翻转", "缩放过渡", "对角线翻转", "反向对角线翻转", "顶端X轴翻转", "底端X轴翻转", "左侧Y轴翻转", "右侧Y轴翻转", "溶解（着色器）"]
+                    model: ["随机",
+                           // 普通过渡效果（0-25）
+                           "淡入淡出", "向左滑动", "向右滑动", "缩放", "淡入淡出+缩放",
+                           "向左旋转90°", "向右旋转90°", "向左旋转180°", "向右旋转180°", "上滑下滑", "下滑上滑",
+                           "左下向右上", "右上向左下", "左上向右下", "右下向左上", "翻转", "反向翻转", "上下翻转", "上翻转", "缩放过渡", "对角线翻转", "反向对角线翻转", "顶端X轴翻转", "底端X轴翻转", "左侧Y轴翻转", "右侧Y轴翻转",
+                           // 着色器过渡效果（26-39）
+                           "溶解（着色器）", "马赛克（着色器）", "波纹扩散（着色器）", "水波扭曲（着色器）", "从左向右擦除（着色器）", "从右向左擦除（着色器）",
+                           "从上向下擦除（着色器）", "从下向上擦除（着色器）", "X轴窗帘（着色器）", "Y轴窗帘（着色器）", "故障艺术（着色器）",
+                           "旋转效果（着色器）", "拉伸效果（着色器）", "百叶窗效果（着色器）"]
                     currentIndex: 0
                     
                     // 自定义popup内容，使用ListView并设置滚动条始终可见
@@ -820,8 +828,15 @@ ApplicationWindow {
                     }
                     
                     onCurrentIndexChanged: {
-                        if (currentIndex === 0) imageViewer.transitionType = -1
-                        else imageViewer.transitionType = currentIndex - 1
+                        if (currentIndex === 0) {
+                            // 随机模式
+                            imageViewer.transitionType = -1
+                        } else {
+                            // 所有过渡效果（包括普通和着色器）：transitionType = currentIndex - 1
+                            // 普通过渡：1-26 → 0-25
+                            // 着色器过渡：27-40 → 26-39
+                            imageViewer.transitionType = currentIndex - 1
+                        }
                     }
                 }
                 
