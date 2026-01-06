@@ -99,22 +99,22 @@ Item {
             
             var selectedTransition = transitionType
             if (selectedTransition === -1) {
-                // 随机选择过渡效果，范围0-39（40种效果）
+                // 随机选择过渡效果，范围0-44（45种效果）
                 // 0-25: 26种普通过渡效果
-                // 26-39: 14种着色器过渡效果
-                selectedTransition = Math.floor(Math.random() * 40);
+                // 26-44: 19种着色器过渡效果
+                selectedTransition = Math.floor(Math.random() * 45);
             }
-            
+
             resetTransform()
-            
+
             currentImageItem.opacity = 1.0; currentImageItem.x = 0; currentImageItem.y = 0
             currentImageItem.scale = 1.0; currentImageItem.rotation = 0
             nextImageItem.x = 0; nextImageItem.y = 0
             nextImageItem.scale = 1.0; nextImageItem.rotation = 0
-            
+
             // 对于随机点过渡效果，需要确保两张图片都可见
-            if (selectedTransition >= 26 && selectedTransition <= 39) {
-                // 着色器过渡：26-39
+            if (selectedTransition >= 26 && selectedTransition <= 44) {
+                // 着色器过渡：26-44
                 nextImageItem.opacity = 1.0;
                 currentImageItem.visible = true;
                 nextImageItem.visible = true;
@@ -126,10 +126,10 @@ Item {
 
             currentImageItem.source = currentImage || ""; nextImageItem.source = nextImage || ""
 
-            // 如果是26-39，则使用着色器过渡
-            if (selectedTransition >= 26 && selectedTransition <= 39) {
-                // 设置着色器过渡效果类型：0-13
-                var shaderEffectIndex = selectedTransition - 26;  // 映射到着色器效果索引0-13
+            // 如果是26-44，则使用着色器过渡
+            if (selectedTransition >= 26 && selectedTransition <= 44) {
+                // 设置着色器过渡效果类型：0-18
+                var shaderEffectIndex = selectedTransition - 26;  // 映射到着色器效果索引0-18
                 shaderEffectType = shaderEffectIndex;
                 shaderEffectTypeValue = shaderEffectIndex;
                 console.log("Starting shader transition: selectedTransition=", selectedTransition, "effectType=", shaderEffectType, "transitionProgress=", shaderEffectItem.transitionProgress)
