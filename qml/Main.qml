@@ -721,7 +721,7 @@ ApplicationWindow {
                         Layout.preferredWidth: 80; Layout.preferredHeight: 28
                         hoverEnabled: true
                         onClicked: accentColorDialog.open()
-                        
+
                         // 应用主题色和悬停效果
                         background: Rectangle {
                             id: accentColorButtonBackground
@@ -729,12 +729,12 @@ ApplicationWindow {
                             border.color: customAccent
                             border.width: 1
                             radius: 4
-                            
+
                             Behavior on color {
                                 ColorAnimation { duration: 200 }
                             }
                         }
-                        
+
                         contentItem: Text {
                     id: accentColorButtonText
                     text: accentColorButton.text
@@ -742,7 +742,7 @@ ApplicationWindow {
                     font.pointSize: 11; horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
-                
+
                 // 监控hovered状态变化，更新样式
                 onHoveredChanged: {
                     if (hovered) {
@@ -753,6 +753,80 @@ ApplicationWindow {
                         accentColorButtonText.color = (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
                     }
                 }
+                    }
+
+                    // 预设主题颜色ComboBox
+                    ComboBox {
+                        id: themeComboBox
+                        Layout.preferredWidth: 120; Layout.preferredHeight: 28
+                        model: [
+                            "紫色调",
+                            "粉色调",
+                            "棕色调",
+                            "深绿色调",
+                            "浅色调",
+                            "深蓝色调"
+                        ]
+                        currentIndex: -1
+
+                        contentItem: Text {
+                            text: themeComboBox.displayText !== "" ? themeComboBox.displayText : "预设主题"
+                            color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
+                            font.pointSize: 11; padding: 8; verticalAlignment: Text.AlignVCenter
+                        }
+
+                        background: Rectangle {
+                            color: window.customBackground
+                            border.color: window.customAccent
+                            border.width: 1
+                            radius: 6
+                        }
+
+                        delegate: ItemDelegate {
+                            text: modelData; width: themeComboBox.width; height: 30
+                            contentItem: Text {
+                                text: modelData
+                                color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
+                                font.pointSize: 11; padding: 10; verticalAlignment: Text.AlignVCenter
+                            }
+                            highlighted: themeComboBox.highlightedIndex === index
+                            background: Rectangle {
+                                color: highlighted ? window.customAccent : window.customBackground
+                            }
+                        }
+
+                        onCurrentIndexChanged: {
+                            if (currentIndex >= 0) {
+                                switch(currentIndex) {
+                                    case 0: // 紫色调
+                                        customBackground = "#181925"
+                                        customAccent = "#645a87"
+                                        break
+                                    case 1: // 粉色调
+                                        customBackground = "#25181e"
+                                        customAccent = "#875a6e"
+                                        break
+                                    case 2: // 棕色调
+                                        customBackground = "#3a2b26"
+                                        customAccent = "#937960"
+                                        break
+                                    case 3: // 深绿色调
+                                        customBackground = "#1e6d72"
+                                        customAccent = "#6cb1af"
+                                        break
+                                    case 4: // 浅色调
+                                        customBackground = "#cdcdd8"
+                                        customAccent = "#445870"
+                                        break
+                                    case 5: // 深蓝色调
+                                        customBackground = "#0d1a28"
+                                        customAccent = "#30638f"
+                                        break
+                                }
+                                // 重置selectedIndex为-1，以便可以再次选择同一主题
+                                themeComboBox.currentIndex = -1
+                            }
+                        }
                     }
                 }
                 
@@ -767,23 +841,26 @@ ApplicationWindow {
                            "淡入淡出", "向左滑动", "向右滑动", "缩放", "淡入淡出+缩放",
                            "向左旋转90°", "向右旋转90°", "向左旋转180°", "向右旋转180°", "上滑下滑", "下滑上滑",
                            "左下向右上", "右上向左下", "左上向右下", "右下向左上", "翻转", "反向翻转", "上下翻转", "上翻转", "缩放过渡", "对角线翻转", "反向对角线翻转", "顶端X轴翻转", "底端X轴翻转", "左侧Y轴翻转", "右侧Y轴翻转",
-                           // 着色器过渡效果（26-44）
+                           // 着色器过渡效果（26-55）
                            "溶解（着色器）", "马赛克（着色器）", "水波扭曲（着色器）", "从左向右擦除（着色器）", "从右向左擦除（着色器）",
                            "从上向下擦除（着色器）", "从下向上擦除（着色器）", "X轴窗帘（着色器）", "Y轴窗帘（着色器）", "故障艺术（着色器）",
                            "旋转效果（着色器）", "拉伸效果（着色器）", "百叶窗效果（着色器）", "扭曲呼吸（着色器）", "涟漪扩散（着色器）",
-                           "鱼眼（着色器）", "切片（着色器）", "反色（着色器）", "模糊渐变（着色器）"]
+                           "鱼眼（着色器）", "切片（着色器）", "反色（着色器）", "模糊渐变（着色器）", "破碎（着色器）",
+                           "雷达扫描（着色器）", "万花筒（着色器）", "火焰燃烧（着色器）", "水墨晕染（着色器）",
+                           "粒子爆炸（着色器）", "极光流动（着色器）", "赛博朋克故障（着色器）", "黑洞吞噬（着色器）",
+                           "全息投影（着色器）", "光速穿越（着色器）"]
                     currentIndex: 0
                     
                     // 自定义popup内容，使用ListView并设置滚动条始终可见
                     popup {
                         // 设置popup高度（增加以容纳更多选项）
-                        height: 320
+                        height: 380
 
                         // 自定义contentItem为ListView
                         contentItem: ListView {
                             clip: true
-                            // 高度调整为容纳48个选项（每个30px，约48行）
-                            implicitHeight: 300
+                            // 高度调整为容纳52个选项（每个30px，约52行）
+                            implicitHeight: 360
                             // 使用delegateModel，仅在popup可见时加载
                             model: transitionComboBox.popup.visible ? transitionComboBox.delegateModel : null
                             currentIndex: transitionComboBox.highlightedIndex
@@ -835,7 +912,7 @@ ApplicationWindow {
                         } else {
                             // 所有过渡效果（包括普通和着色器）：transitionType = currentIndex - 1
                             // 普通过渡：1-26 → 0-25
-                            // 着色器过渡：27-40 → 26-39
+                            // 着色器过渡：27-56 → 26-55
                             imageViewer.transitionType = currentIndex - 1
                         }
                     }

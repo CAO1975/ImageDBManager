@@ -9,7 +9,7 @@ layout(std140, binding = 0) uniform buf {
     mat4 qt_Matrix;
     float qt_Opacity;
     float progress;
-    int effectType;  // 效果类型: 0=溶解, 1=马赛克, 2=水波扭曲, 3=从左向右擦除, 4=从右向左擦除, 5=从上向下擦除, 6=从下向上擦除, 7=X轴窗帘, 8=Y轴窗帘, 9=故障, 10=旋转, 11=拉伸, 12=百叶窗, 13=扭曲呼吸, 14=涟漪扩散, 15=鱼眼, 16=切片, 17=反色, 18=模糊渐变
+    int effectType;  // 效果类型: 0=溶解, 1=马赛克, 2=水波扭曲, 3=从左向右擦除, 4=从右向左擦除, 5=从上向下擦除, 6=从下向上擦除, 7=X轴窗帘, 8=Y轴窗帘, 9=故障, 10=旋转, 11=拉伸, 12=百叶窗, 13=扭曲呼吸, 14=涟漪扩散, 15=鱼眼, 16=切片, 17=反色, 18=模糊渐变, 19=破碎, 20=雷达扫描, 21=万花筒, 22=火焰燃烧, 23=水墨晕染, 24=时空隧道, 25=镜像分屏
     vec3 backgroundColor;  // 背景色 (RGB)
 };
 
@@ -433,6 +433,467 @@ void main() {
             break;
         }
 
+        case 19: // 破碎效果
+        {
+            vec2 center = vec2(0.5, 0.5);
+            vec2 uvOffset = uv - center;
+            float dist = length(uvOffset);
+            float angle = atan(uvOffset.y, uvOffset.x);
+
+            // 破碎参数
+            float numShards = 12.0;
+            float shardAngle = 2.0 * 3.14159 / numShards;
+            int shardIndex = int(mod(angle + 3.14159, 2.0 * 3.14159) / shardAngle);
+
+            // 随机偏移模拟破碎
+            float randomOffset = random(vec2(float(shardIndex), progress));
+            vec2 shardDir = vec2(cos(float(shardIndex) * shardAngle), sin(float(shardIndex) * shardAngle));
+
+            if (progress < 0.5) {
+                // 前半段：旧图破碎向外飞散
+                float t = progress * 2.0;
+                float flyDistance = t * 0.3 * randomOffset;
+                vec2 shatteredUV = uv + shardDir * flyDistance;
+                colorFrom = texture(from, shatteredUV);
+                colorTo = colorFrom;
+                mixFactor = 0.0;
+            } else {
+                // 后半段：新图从碎片中重组
+                float t = (progress - 0.5) * 2.0;
+                float flyDistance = (1.0 - t) * 0.3 * randomOffset;
+                vec2 shatteredUV = uv - shardDir * flyDistance;
+                colorFrom = texture(to, shatteredUV);
+                colorTo = colorFrom;
+                mixFactor = 1.0;
+            }
+
+            break;
+        }
+
+        case 20: // 雷达扫描效果
+        {
+            vec2 center = vec2(0.5, 0.5);
+            vec2 uvOffset = uv - center;
+            float dist = distance(uv, center);
+            float angle = atan(uvOffset.y, uvOffset.x);
+
+            // 雷达扫描线从中心旋转扫描，旋转360度（1圈）完成过渡
+            float scanAngle = progress * 6.28318;  // 旋转1圈（0到2π）
+
+            // 将角度映射到0-2π范围（从0开始，逆时针方向）
+            float normalizedAngle = mod(angle + 3.14159, 6.28318);
+
+            // 判断当前像素的角度是否在扫描线扫过的区域内
+            // 扫过的区域（0到scanAngle）：显示新图
+            // 未扫过的区域：显示旧图
+            mixFactor = smoothstep(0.0, 0.05, scanAngle - normalizedAngle);
+
+            // 采样两张图片
+            colorFrom = texture(from, uv);
+            colorTo = texture(to, uv);
+
+            break;
+        }
+
+        case 21: // 万花筒效果
+        {
+            vec2 center = vec2(0.5, 0.5);
+            vec2 uvOffset = uv - center;
+            float dist = length(uvOffset);
+            float angle = atan(uvOffset.y, uvOffset.x);
+
+            // 万花筒参数：6重对称
+            float numSegments = 6.0;
+            float segmentAngle = 2.0 * 3.14159 / numSegments;
+            float segmentedAngle = mod(angle + 3.14159, segmentAngle) - segmentAngle / 2.0;
+
+            // 旋转万花筒
+            float rotateAngle = progress * 6.28318;
+
+            vec2 kaleidoscopeUV = center + dist * vec2(cos(segmentedAngle + rotateAngle), sin(segmentedAngle + rotateAngle));
+
+            if (progress < 0.5) {
+                // 前半段：显示旧图万花筒
+                colorFrom = texture(from, kaleidoscopeUV);
+                colorTo = colorFrom;
+                mixFactor = 0.0;
+            } else {
+                // 后半段：显示新图万花筒
+                colorFrom = texture(to, kaleidoscopeUV);
+                colorTo = colorFrom;
+                mixFactor = 1.0;
+            }
+
+            break;
+        }
+
+        case 22: // 火焰燃烧效果
+        {
+            vec2 center = vec2(0.5, 0.5);
+            float distFromBottom = 1.0 - uv.y;  // 距离底部的距离
+
+            // 火焰从底部向上蔓延
+            float flameHeight = progress * 1.2;
+
+            // 火焰边缘抖动
+            float flameJitter = sin(uv.x * 20.0 + progress * 10.0) * 0.02 * sin(progress * 3.14159);
+            float flameEdge = flameHeight + flameJitter;
+
+            // 判断像素是否在火焰边缘附近（燃烧的旧图区域）
+            // burningZone: 1表示在燃烧边缘（火焰上方），0表示其他位置
+            float burningZone = smoothstep(flameEdge - 0.15, flameEdge, distFromBottom);
+            burningZone *= (1.0 - smoothstep(flameEdge, flameEdge + 0.05, distFromBottom));
+
+            // mixFactor控制新旧图片的混合：火焰下方显示旧图，上方显示新图
+            mixFactor = 1.0 - smoothstep(flameEdge - 0.05, flameEdge + 0.05, distFromBottom);
+
+            // 采样原始图片
+            colorFrom = texture(from, uv);
+            colorTo = texture(to, uv);
+
+            // 只在燃烧的旧图区域添加火焰效果
+            if (burningZone > 0.01) {
+                // 火焰颜色渐变：底部红色 -> 中间橙色 -> 顶部黄色
+                vec3 fireColor = mix(vec3(1.0, 0.0, 0.0), vec3(1.0, 0.5, 0.0), smoothstep(0.0, 0.5, distFromBottom / flameEdge));
+                fireColor = mix(fireColor, vec3(1.0, 0.8, 0.2), smoothstep(0.5, 1.0, distFromBottom / flameEdge));
+
+                // 添加火焰闪烁
+                float flicker = sin(uv.x * 30.0 + uv.y * 30.0 + progress * 20.0) * 0.5 + 0.5;
+                fireColor *= (0.8 + 0.4 * flicker);
+
+                // 只对旧图添加火焰效果
+                colorFrom.rgb += fireColor * 0.5 * burningZone;
+            }
+
+            break;
+        }
+
+        case 23: // 水墨晕染效果
+        {
+            vec2 center = vec2(0.5, 0.5);
+            float dist = distance(uv, center);
+
+            // 水墨从中心晕染扩散
+            float inkRadius = progress * 0.9;
+
+            // 晕染边缘不规则
+            float inkJitter = random(uv) * 0.05 * sin(progress * 3.14159);
+            float inkEdge = inkRadius + inkJitter;
+
+            mixFactor = smoothstep(inkEdge, inkEdge - 0.1, dist);
+
+            // 晕染区域显示新图，带水墨模糊
+            vec2 inkBlurUV = uv + random(uv * 10.0 + progress) * 0.01;
+            colorFrom = texture(from, uv);
+            colorTo = texture(to, inkBlurUV);
+
+            break;
+        }
+
+        case 24: // 粒子爆炸效果
+        {
+            vec2 center = vec2(0.5, 0.5);
+            vec2 uvOffset = uv - center;
+            float dist = length(uvOffset);
+
+            // 粒子爆炸：旧图片碎裂成粒子向四周爆炸
+            float particleSize = 0.05;  // 粒子大小（固定）
+            float particleGridSize = 20.0;  // 粒子网格大小（20x20 = 400个粒子）
+
+            // 计算粒子网格
+            vec2 gridUV = uv * particleGridSize;
+            vec2 gridID = floor(gridUV);
+            vec2 gridPos = fract(gridUV);
+
+            // 为每个粒子生成随机性
+            float seed = fract(sin(dot(gridID, vec2(12.9898, 78.233))) * 43758.5453);
+            float particleAngle = seed * 6.28318;  // 随机角度
+            float particleSpeed = 0.3 + seed * 0.5;  // 随机速度 0.3-0.8
+
+            // 粒子爆炸位置：随时间向外飞
+            float explosionDist = progress * 1.2 * particleSpeed;
+            vec2 particleOffset = explosionDist * vec2(cos(particleAngle), sin(particleAngle));
+
+            // 从原始位置采样旧图（粒子飞走后留下的空隙）
+            vec2 oldUV = uv + particleOffset;
+
+            // 粒子形状：圆形
+            float particleMask = smoothstep(0.5, 0.2, length(gridPos - 0.5));
+
+            // 随着粒子飞远，逐渐变小
+            particleMask *= smoothstep(1.2, 0.0, explosionDist);
+
+            // 旧图只在粒子位置可见
+            vec4 oldParticleColor = texture(from, oldUV);
+            colorFrom = oldParticleColor * particleMask;
+
+            // 新图从中心逐渐显现
+            float newRadius = progress * 0.9;
+            float distFromCenter = length(uvOffset);
+            float newMask = 1.0 - smoothstep(newRadius - 0.1, newRadius + 0.1, distFromCenter);
+
+            // 新图采样
+            colorTo = texture(to, uv) * newMask;
+
+            // 混合：前半段主要是旧图粒子，后半段主要是新图
+            mixFactor = progress;
+
+            // 新图在粒子之间的空隙逐渐显示
+            if (progress < 0.7) {
+                colorTo = colorTo * (progress / 0.7);
+            }
+
+            break;
+        }
+
+        case 25: // 极光流动效果
+        {
+            vec2 center = vec2(0.5, 0.5);
+            vec2 uvOffset = uv - center;
+
+            // 极光流动效果
+            float time = progress * 5.0;
+
+            // 创建多层极光波
+            float wave1 = sin(uvOffset.x * 10.0 + time) * 0.5 + 0.5;
+            float wave2 = sin(uvOffset.y * 8.0 - time * 0.7) * 0.5 + 0.5;
+            float wave3 = sin((uvOffset.x + uvOffset.y) * 12.0 + time * 1.3) * 0.5 + 0.5;
+
+            // 极光色彩：绿色、紫色、蓝色
+            vec3 auroraColor = mix(vec3(0.0, 0.8, 0.5), vec3(0.5, 0.0, 0.8), wave1);
+            auroraColor = mix(auroraColor, vec3(0.0, 0.5, 1.0), wave2);
+            auroraColor = mix(auroraColor, vec3(0.2, 1.0, 0.8), wave3);
+
+            // 极光流动遮罩
+            float auroraMask = (wave1 + wave2 + wave3) / 3.0;
+            auroraMask *= smoothstep(0.0, 0.3, progress) * smoothstep(1.0, 0.7, progress);
+
+            // 添加闪烁效果
+            float sparkle = sin(time * 20.0 + uv.x * 50.0 + uv.y * 50.0) * 0.5 + 0.5;
+            auroraColor += sparkle * 0.2;
+
+            // 混合
+            mixFactor = progress;
+            colorFrom = texture(from, uv);
+            colorTo = texture(to, uv);
+
+            // 在过渡期间添加极光色彩
+            vec4 aurora = vec4(auroraColor * auroraMask * 0.6, auroraMask * 0.5);
+            colorFrom = mix(colorFrom, aurora, auroraMask * 0.5);
+            colorTo = mix(colorTo, aurora, (1.0 - auroraMask) * 0.5);
+
+            break;
+        }
+
+        case 26: // 赛博朋克故障效果
+        {
+            vec2 center = vec2(0.5, 0.5);
+
+            // 故障强度随进度变化
+            float glitchIntensity = sin(progress * 3.14159) * 0.02 + 0.005;
+
+            // RGB分离效果
+            float rgbOffset = glitchIntensity * 3.0;
+            vec4 fromR = texture(from, uv + vec2(rgbOffset, 0.0));
+            vec4 fromG = texture(from, uv);
+            vec4 fromB = texture(from, uv - vec2(rgbOffset, 0.0));
+            vec4 glitchFrom = vec4(fromR.r, fromG.g, fromB.b, fromR.a);
+
+            vec4 toR = texture(to, uv + vec2(rgbOffset, 0.0));
+            vec4 toG = texture(to, uv);
+            vec4 toB = texture(to, uv - vec2(rgbOffset, 0.0));
+            vec4 glitchTo = vec4(toR.r, toG.g, toB.b, toR.a);
+
+            // 扫描线效果
+            float scanline = sin(uv.y * 100.0 + progress * 20.0) * 0.5 + 0.5;
+            float scanlineMask = mod(uv.y * 50.0, 2.0) < 1.0 ? 0.9 : 1.0;
+
+            // 数字噪点
+            float noise = fract(sin(dot(uv, vec2(12.9898, 78.233))) * 43758.5453);
+            float noiseMask = smoothstep(0.95, 1.0, noise);
+            vec2 noiseOffset = noiseMask * (vec2(noise, noise) - 0.5) * 0.1;
+
+            // 随机位移
+            float blockGlitch = step(0.97, fract(sin(uv.x * 10.0 + uv.y * 10.0 + progress * 5.0) * 43758.5453));
+            vec2 blockOffset = blockGlitch * vec2(0.0, 0.05);
+
+            // 应用所有效果
+            mixFactor = progress;
+            colorFrom = texture(from, uv + noiseOffset + blockOffset);
+            colorTo = texture(to, uv + noiseOffset + blockOffset);
+
+            // RGB分离
+            colorFrom = glitchFrom;
+            colorTo = glitchTo;
+
+            // 扫描线
+            colorFrom.rgb *= scanlineMask;
+            colorTo.rgb *= scanlineMask;
+
+            // 添加故障闪烁
+            if (noiseMask > 0.5) {
+                colorFrom.rgb = mix(colorFrom.rgb, vec3(0.0, 1.0, 1.0), 0.3);
+                colorTo.rgb = mix(colorTo.rgb, vec3(1.0, 0.0, 1.0), 0.3);
+            }
+
+            break;
+        }
+
+        case 27: // 黑洞吞噬效果
+        {
+            vec2 center = vec2(0.5, 0.5);
+            vec2 uvOffset = uv - center;
+            float dist = length(uvOffset);
+            float angle = atan(uvOffset.y, uvOffset.x);
+
+            // 黑洞吞噬：旧图片被吸入黑洞并扭曲，新图片从另一侧显现
+            float blackholeRadius = progress * 0.5;  // 黑洞半径
+
+            // 旧图扭曲效果
+            float twistStrength = (1.0 - progress) * 3.14159;  // 扭曲强度
+            float twistedAngle = angle + twistStrength * (1.0 - smoothstep(blackholeRadius, blackholeRadius + 0.3, dist));
+
+            // 径向收缩
+            float shrinkFactor = smoothstep(blackholeRadius, blackholeRadius + 0.5, dist);
+            shrinkFactor = mix(shrinkFactor, 1.0, 1.0 - progress);
+
+            vec2 oldUV = center + shrinkFactor * dist * vec2(cos(twistedAngle), sin(twistedAngle));
+
+            // 黑洞边缘吸积盘效果
+            float accretionDisk = smoothstep(blackholeRadius - 0.05, blackholeRadius, dist) *
+                                   smoothstep(blackholeRadius + 0.1, blackholeRadius, dist);
+            vec3 diskColor = vec3(1.0, 0.5, 0.0) * accretionDisk;
+
+            // 新图从另一侧显现
+            float newScale = progress;
+            vec2 newUV = center + newScale * vec2(cos(angle), sin(angle)) * dist;
+
+            // 混合
+            mixFactor = progress;
+            colorFrom = texture(from, oldUV);
+            colorTo = texture(to, newUV);
+
+            // 黑洞区域显示黑色
+            if (dist < blackholeRadius) {
+                colorFrom = vec4(0.0, 0.0, 0.0, 1.0);
+                colorTo = colorFrom;
+            }
+
+            // 添加吸积盘发光
+            colorFrom.rgb += diskColor * 0.5;
+            colorTo.rgb += diskColor * 0.5;
+
+            break;
+        }
+
+        case 28: // 全息投影效果
+        {
+            vec2 center = vec2(0.5, 0.5);
+
+            // 全息扫描线效果
+            float scanPosition = progress;
+            float scanWidth = 0.1;
+            float scanDistance = distance(uv.y, scanPosition);
+
+            // 扫描线
+            float scanline = smoothstep(scanWidth, 0.0, scanDistance);
+
+            // 全息闪烁
+            float flicker = sin(uv.x * 100.0 + uv.y * 100.0 + progress * 30.0) * 0.5 + 0.5;
+            flicker = mix(flicker, 1.0, 0.7);
+
+            // RGB分离（全息特征）
+            float rgbOffset = 0.005;
+            vec4 fromR = texture(from, uv + vec2(rgbOffset, 0.0));
+            vec4 fromG = texture(from, uv);
+            vec4 fromB = texture(from, uv - vec2(rgbOffset, 0.0));
+            vec4 hologramFrom = vec4(fromR.r, fromG.g, fromB.b, fromR.a) * flicker;
+
+            vec4 toR = texture(to, uv + vec2(rgbOffset, 0.0));
+            vec4 toG = texture(to, uv);
+            vec4 toB = texture(to, uv - vec2(rgbOffset, 0.0));
+            vec4 hologramTo = vec4(toR.r, toG.g, toB.b, toR.a) * flicker;
+
+            // 全息蓝绿色调
+            vec3 hologramTint = vec3(0.0, 0.8, 1.0);
+            hologramFrom.rgb = mix(hologramFrom.rgb, hologramTint, 0.3);
+            hologramTo.rgb = mix(hologramTo.rgb, hologramTint, 0.3);
+
+            // 水平扫描线网格
+            float hGrid = mod(uv.y * 30.0, 1.0) < 0.1 ? 0.7 : 1.0;
+            hologramFrom.rgb *= hGrid;
+            hologramTo.rgb *= hGrid;
+
+            // 混合
+            mixFactor = progress;
+            colorFrom = hologramFrom;
+            colorTo = hologramTo;
+
+            // 扫描线高亮
+            if (scanline > 0.5) {
+                colorFrom.rgb += vec3(0.0, 0.5, 1.0) * scanline * 0.5;
+                colorTo.rgb += vec3(0.0, 0.5, 1.0) * scanline * 0.5;
+            }
+
+            break;
+        }
+
+        case 29: // 光速穿越效果
+        {
+            vec2 center = vec2(0.5, 0.5);
+            vec2 uvOffset = uv - center;
+            float dist = length(uvOffset);
+
+            // 光速穿越：速度线划过，图片被穿透
+            float lineCount = 50.0;
+            float lineSpeed = progress * 10.0;
+
+            // 生成速度线
+            float lines = 0.0;
+            for (float i = 0.0; i < lineCount; i++) {
+                float linePos = fract(i / lineCount + progress * 0.5);
+                float lineDist = abs(fract(uv.x * lineCount - linePos) - 0.5);
+                float lineWidth = 0.01 + sin(i) * 0.005;
+                lines += smoothstep(lineWidth, 0.0, lineDist);
+            }
+
+            // 速度线高亮
+            vec3 speedColor = vec3(1.0, 1.0, 1.0) * lines * 0.8;
+
+            // 图片扭曲（速度感）
+            float warpStrength = sin(progress * 3.14159) * 0.02;
+            vec2 warpUV = uv + vec2(sin(uv.y * 20.0 + progress * 10.0) * warpStrength,
+                                    cos(uv.x * 20.0 + progress * 10.0) * warpStrength);
+
+            // 径向模糊
+            float radialBlur = 0.0;
+            int blurSamples = 5;
+            for (int i = 0; i < blurSamples; i++) {
+                float t = float(i) / float(blurSamples);
+                vec2 sampleUV = uv + uvOffset * t * progress * 0.1;
+                radialBlur += texture(from, sampleUV).r;
+            }
+            radialBlur /= float(blurSamples);
+
+            // 混合
+            mixFactor = progress;
+            colorFrom = texture(from, warpUV);
+            colorTo = texture(to, warpUV);
+
+            // 添加速度线
+            colorFrom.rgb += speedColor;
+            colorTo.rgb += speedColor;
+
+            // 星星闪烁
+            float star = fract(sin(dot(uv, vec2(12.9898, 78.233))) * 43758.5453);
+            if (star > 0.99) {
+                colorFrom.rgb += vec3(1.0, 1.0, 1.0) * sin(progress * 20.0) * 0.5 + 0.5;
+                colorTo.rgb += vec3(1.0, 1.0, 1.0) * sin(progress * 20.0) * 0.5 + 0.5;
+            }
+
+            break;
+        }
+
         default: // 默认淡入淡出
         {
             mixFactor = progress;
@@ -440,23 +901,6 @@ void main() {
         }
     }
 
-    // 鱼眼效果的额外淡入淡出
-    if (effectType == 15) {
-        float fadeAlpha;
-        if (progress < 0.5) {
-            // 前半段：淡出
-            float t = progress * 2.0;
-            fadeAlpha = 1.0 - t;  // 1.0 → 0.0
-        } else {
-            // 后半段：淡入
-            float t = (progress - 0.5) * 2.0;
-            fadeAlpha = t;  // 0.0 → 1.0
-        }
-
-        // 在mix之后应用淡入淡出
-        colorFrom.rgb *= fadeAlpha;
-        colorTo.rgb *= fadeAlpha;
-    }
 
     // 确保透明区域显示背景色
     if (colorFrom.a < 0.01) {

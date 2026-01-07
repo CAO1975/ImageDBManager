@@ -99,10 +99,10 @@ Item {
             
             var selectedTransition = transitionType
             if (selectedTransition === -1) {
-                // 随机选择过渡效果，范围0-44（45种效果）
+                // 随机选择过渡效果，范围0-51（52种效果）
                 // 0-25: 26种普通过渡效果
-                // 26-44: 19种着色器过渡效果
-                selectedTransition = Math.floor(Math.random() * 45);
+                // 26-51: 26种着色器过渡效果
+                selectedTransition = Math.floor(Math.random() * 57);
             }
 
             resetTransform()
@@ -113,8 +113,8 @@ Item {
             nextImageItem.scale = 1.0; nextImageItem.rotation = 0
 
             // 对于随机点过渡效果，需要确保两张图片都可见
-            if (selectedTransition >= 26 && selectedTransition <= 44) {
-                // 着色器过渡：26-44
+            if (selectedTransition >= 26 && selectedTransition <= 55) {
+                // 着色器过渡：26-55（30种效果）
                 nextImageItem.opacity = 1.0;
                 currentImageItem.visible = true;
                 nextImageItem.visible = true;
@@ -126,15 +126,13 @@ Item {
 
             currentImageItem.source = currentImage || ""; nextImageItem.source = nextImage || ""
 
-            // 如果是26-44，则使用着色器过渡
-            if (selectedTransition >= 26 && selectedTransition <= 44) {
-                // 设置着色器过渡效果类型：0-18
-                var shaderEffectIndex = selectedTransition - 26;  // 映射到着色器效果索引0-18
+            // 如果是26-55，则使用着色器过渡
+            if (selectedTransition >= 26 && selectedTransition <= 55) {
+                // 设置着色器过渡效果类型：0-29
+                var shaderEffectIndex = selectedTransition - 26;  // 映射到着色器效果索引0-29
                 shaderEffectType = shaderEffectIndex;
                 shaderEffectTypeValue = shaderEffectIndex;
-                console.log("Starting shader transition: selectedTransition=", selectedTransition, "effectType=", shaderEffectType, "transitionProgress=", shaderEffectItem.transitionProgress)
-                shaderEffectTypeValue = shaderEffectType;  // 更新中间变量
-                console.log("Starting shader transition: selectedTransition=", selectedTransition, "effectType=", shaderEffectType, "transitionProgress=", shaderTransition.transitionProgress)
+                console.log("Starting shader transition: selectedTransition=", selectedTransition, "shaderEffectIndex=", shaderEffectIndex, "effectType=", shaderEffectType, "transitionProgress=", shaderEffectItem.transitionProgress)
                 // 显示着色器过渡组件，将普通图片项隐藏（但保持ShaderEffectSource可见）
                 shaderTransition.visible = true
                 currentImageItem.visible = true  // 确保源图片可见，以便ShaderEffectSource可以捕获
