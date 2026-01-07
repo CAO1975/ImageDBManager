@@ -1740,3 +1740,14 @@ build/.cmake/api/v1/reply/index-2026-01-07T08-30-37-0907.json
 build/.cmake/api/v1/reply/target-ImageDBManager_autogen_timestamp_deps-Release-7795f4c4b2135fb30fef.json
 build/.cmake/api/v1/reply/target-ImageDBManager-Release-416a27574362f9424d50.json
 build/release/ImageDBManager_boxed.exe
+build/.cmake/api/v1/reply/codemodel-v2-88d2abbbbee04e7d80b3.json
+build/.cmake/api/v1/reply/index-2026-01-07T10-01-07-0125.json
+build/.cmake/api/v1/reply/target-ImageDBManager_autogen_timestamp_deps-Release-9c0b9c188bb62c161fd4.json
+build/.cmake/api/v1/reply/target-ImageDBManager-Release-719a48d00b26b2b9cfa9.json
+build/.cmake/api/v1/reply/codemodel-v2-12f1190f3d6548d00813.json
+build/.cmake/api/v1/reply/index-2026-01-07T13-07-34-0234.json
+build/.cmake/api/v1/reply/target-ImageDBManager-Release-4d7025a6d983bb1406e9.json
+.gitignore
+build/CMakeFiles/ImageDBManager.dir/depend.internal
+build/CMakeFiles/ImageDBManager.dir/RC.includecache
+build/CMakeFiles/ImageDBManager.dir/resource.rc.obj

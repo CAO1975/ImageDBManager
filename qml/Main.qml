@@ -14,30 +14,199 @@ ApplicationWindow {
     minimumWidth: 850
     minimumHeight: 580
     title: "ImageDBManager"
-    
+
     // 🔑 关键：设置窗口背景透明
     color: "transparent"
-    
+
+
     // 使用Universal暗色主题
     Universal.theme: Universal.Dark
-    //Universal.accent: Universal.Orange
-    
+
     // 自定义颜色属性，用于动态修改
     property color customBackground: '#0d1a28'
     property color customAccent: '#30638f'
-    
+
     // 右键菜单上下文属性
     property int contextMenuGroupId: -1
     property string contextMenuGroupName: ""
-    
+
     // 当前选中的分组ID
     property int currentGroupId: -1
-    
+
     // 标题栏显示信息
     property string groupPath: ""
     property int imageCount: 0
     property string currentImageInfo: ""
     
+    // 图片尺寸缓存
+    property var imageSizeCache: ({})
+    
+    // 连接数据库的图片尺寸信号
+    Connections {
+        target: database
+        function onImageSizeLoaded(imageId, width, height) {
+            console.log("Image size loaded:", imageId, width, "x", height)
+            imageSizeCache[imageId] = { width: width, height: height }
+        }
+    }
+
+    // 可复用组件：标题栏分隔符
+    component TitleBarSeparator: Rectangle {
+        width: 1
+        height: 20
+        color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
+        opacity: 0.3
+        Layout.alignment: Qt.AlignVCenter
+        Layout.leftMargin: 8
+        Layout.rightMargin: 8
+    }
+
+    // 可复用组件：主题颜色选择按钮（带悬停效果）
+    component ThemeColorButton: Button {
+        id: btn
+        property color bgColor: window.customBackground
+        property color hoverColor: window.customAccent
+
+        Layout.preferredWidth: 80
+        Layout.preferredHeight: 28
+        hoverEnabled: true
+
+        background: Rectangle {
+            id: btnBackground
+            color: btn.bgColor
+            border.color: window.customAccent
+            border.width: 1
+            radius: 4
+
+            Behavior on color {
+                ColorAnimation { duration: 200 }
+            }
+        }
+
+        contentItem: Text {
+            id: btnText
+            text: btn.text
+            color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
+            font.pointSize: 11
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
+
+        onHoveredChanged: {
+            if (hovered) {
+                btnBackground.color = btn.hoverColor
+                btnText.color = "white"
+            } else {
+                btnBackground.color = btn.bgColor
+                btnText.color = (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
+            }
+        }
+    }
+
+    // 可复用组件：主题化ComboBox
+    component StyledComboBox: ComboBox {
+        id: root
+        property color textColor: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
+        property string placeholderText: ""
+
+        Layout.preferredHeight: 28
+
+        contentItem: Text {
+            text: root.displayText !== "" ? root.displayText : root.placeholderText
+            color: root.textColor
+            font.pointSize: 11
+            padding: 8
+            verticalAlignment: Text.AlignVCenter
+        }
+
+        background: Rectangle {
+            color: window.customBackground
+            border.color: window.customAccent
+            border.width: 1
+            radius: 6
+        }
+
+        delegate: ItemDelegate {
+            text: modelData
+            width: root.width
+            height: 30
+            contentItem: Text {
+                text: modelData
+                color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
+                font.pointSize: 11
+                padding: 10
+                verticalAlignment: Text.AlignVCenter
+            }
+            highlighted: root.highlightedIndex === index
+            background: Rectangle {
+                color: highlighted ? window.customAccent : window.customBackground
+            }
+        }
+
+        popup: Popup {
+            y: root.height
+            width: root.width
+            implicitHeight: contentItem.implicitHeight
+            padding: 1
+
+            background: Rectangle {
+                color: window.customBackground
+                border.color: window.customAccent
+                border.width: 1
+                radius: 4
+            }
+
+            contentItem: ListView {
+                clip: true
+                implicitHeight: Math.min(contentHeight, 360)
+                model: root.delegateModel
+                currentIndex: root.highlightedIndex
+                spacing: 1
+
+                ScrollBar.vertical: StyledScrollBar {}
+            }
+        }
+    }
+
+    // 可复用组件：主题化TextField
+    component StyledTextField: TextField {
+        id: root
+        property color textColor: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
+
+        Layout.preferredHeight: 28
+
+        placeholderTextColor: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#666666" : "#888888"
+        color: root.textColor
+        font.pointSize: 11
+
+        background: Rectangle {
+            color: window.customBackground
+            border.color: window.customAccent
+            border.width: 1
+            radius: 6
+        }
+    }
+
+    // 可复用组件：主题化ScrollBar
+    component StyledScrollBar: ScrollBar {
+        property color backgroundColor: window.customBackground
+        property color accentColor: window.customAccent
+
+        width: 8
+        policy: ScrollBar.AlwaysOn
+        active: true
+
+        background: Rectangle {
+            color: backgroundColor
+            radius: 4
+        }
+
+        contentItem: Rectangle {
+            radius: 4
+            color: accentColor
+        }
+    }
+
     // 隐藏原生标题栏，添加支持透明背景的标志
     flags: Qt.Window | Qt.FramelessWindowHint | Qt.WindowTitleHint | 
            Qt.WindowSystemMenuHint | Qt.WindowMinMaxButtonsHint | Qt.WindowCloseButtonHint
@@ -69,14 +238,7 @@ ApplicationWindow {
         currentImageInfo = "";
         console.log("Title bar info initialized: groupPath=" + groupPath + ", imageCount=" + imageCount);
     }
-    
-    // 刷新标题栏信息
-    function refreshTitleBarInfo() {
-        groupPath = getFullGroupPath(currentGroupId);
-        imageCount = updateImageCount(currentGroupId);
-        console.log("Title bar info refreshed: groupPath=" + groupPath + ", imageCount=" + imageCount);
-    }
-    
+
     // 获取当前图片详细信息
     function getCurrentImageInfo(imageId) {
         if (imageId === -1) {
@@ -90,7 +252,9 @@ ApplicationWindow {
         
         var byteSize = database.getImageByteSize(imageId);
         console.log("Byte size: " + byteSize);
-        var imageSize = database.getImageSize(imageId);
+        
+        // 从缓存获取图片尺寸，如果缓存中没有则使用默认值
+        var imageSize = imageSizeCache[imageId] || { width: 0, height: 0 };
         console.log("Image size: " + JSON.stringify(imageSize));
         
         // 格式化字节大小
@@ -103,8 +267,8 @@ ApplicationWindow {
             formattedSize = (byteSize / (1024 * 1024)).toFixed(2) + " MB";
         }
         
-        // 格式化尺寸
-        var formattedDimensions = imageSize.width + "×" + imageSize.height;
+        // 格式化尺寸（使用缓存的尺寸）
+        var formattedDimensions = imageSize.width > 0 ? (imageSize.width + "×" + imageSize.height) : "未知尺寸";
         
         var info = filename + " - " + formattedSize + " - " + formattedDimensions;
         console.log("Current image info: " + info);
@@ -544,14 +708,10 @@ ApplicationWindow {
                     font.pointSize: 11; font.bold: true
                     verticalAlignment: Text.AlignVCenter
                 }
-                
+
                 // 自适应宽度的分隔符
-                Rectangle {
-                    width: 1; height: 20; color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"; opacity: 0.3
-                    Layout.alignment: Qt.AlignVCenter
-                    Layout.leftMargin: 8; Layout.rightMargin: 8
-                }
-                
+                TitleBarSeparator {}
+
                 // 第一段：分组完整路径
                 Text {
                     text: window.groupPath; color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
@@ -560,28 +720,20 @@ ApplicationWindow {
                     elide: Text.ElideMiddle
                     Layout.maximumWidth: parent.width * 0.3
                 }
-                
+
                 // 自适应宽度的分隔符
-                Rectangle {
-                    width: 1; height: 20; color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"; opacity: 0.3
-                    Layout.alignment: Qt.AlignVCenter
-                    Layout.leftMargin: 8; Layout.rightMargin: 8
-                }
-                
+                TitleBarSeparator {}
+
                 // 第二段：当前分组图片数量
                 Text {
                     text: "图片数量: " + window.imageCount; color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
                     font.pointSize: 10
                     verticalAlignment: Text.AlignVCenter
                 }
-                
+
                 // 自适应宽度的分隔符
-                Rectangle {
-                    width: 1; height: 20; color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"; opacity: 0.3
-                    Layout.alignment: Qt.AlignVCenter
-                    Layout.leftMargin: 8; Layout.rightMargin: 8
-                }
-                
+                TitleBarSeparator {}
+
                 // 第三段：当前图片详细信息
                 Text {
                     text: window.currentImageInfo; color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
@@ -674,91 +826,23 @@ ApplicationWindow {
                     spacing: 8
                     
                     // 背景色选择按钮
-                    Button {
-                        id: backgroundColorButton
+                    ThemeColorButton {
                         text: "背景色"
-                        Layout.preferredWidth: 80; Layout.preferredHeight: 28
-                        hoverEnabled: true
+                        bgColor: customBackground
                         onClicked: backgroundColorDialog.open()
-                        
-                        // 应用主题色和悬停效果
-                        background: Rectangle {
-                            id: backgroundColorButtonBackground
-                            color: customBackground
-                            border.color: customAccent
-                            border.width: 1
-                            radius: 4
-                            
-                            Behavior on color {
-                                ColorAnimation { duration: 200 }
-                            }
-                        }
-                        
-                        contentItem: Text {
-                    id: backgroundColorButtonText
-                    text: backgroundColorButton.text
-                    color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
-                    font.pointSize: 11; horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-                
-                // 监控hovered状态变化，更新样式
-                onHoveredChanged: {
-                    if (hovered) {
-                        backgroundColorButtonBackground.color = customAccent
-                        backgroundColorButtonText.color = "white"
-                    } else {
-                        backgroundColorButtonBackground.color = customBackground
-                        backgroundColorButtonText.color = (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
                     }
-                }
-                    }
-                    
+
                     // 强调色选择按钮
-                    Button {
-                        id: accentColorButton
+                    ThemeColorButton {
                         text: "强调色"
-                        Layout.preferredWidth: 80; Layout.preferredHeight: 28
-                        hoverEnabled: true
                         onClicked: accentColorDialog.open()
-
-                        // 应用主题色和悬停效果
-                        background: Rectangle {
-                            id: accentColorButtonBackground
-                            color: customBackground
-                            border.color: customAccent
-                            border.width: 1
-                            radius: 4
-
-                            Behavior on color {
-                                ColorAnimation { duration: 200 }
-                            }
-                        }
-
-                        contentItem: Text {
-                    id: accentColorButtonText
-                    text: accentColorButton.text
-                    color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
-                    font.pointSize: 11; horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                // 监控hovered状态变化，更新样式
-                onHoveredChanged: {
-                    if (hovered) {
-                        accentColorButtonBackground.color = customAccent
-                        accentColorButtonText.color = "white"
-                    } else {
-                        accentColorButtonBackground.color = customBackground
-                        accentColorButtonText.color = (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
-                    }
-                }
                     }
 
                     // 预设主题颜色ComboBox
-                    ComboBox {
+                    StyledComboBox {
                         id: themeComboBox
-                        Layout.preferredWidth: 120; Layout.preferredHeight: 28
+                        Layout.preferredWidth: 120
+                        placeholderText: "预设主题"
                         model: [
                             "紫色调",
                             "粉色调",
@@ -768,32 +852,6 @@ ApplicationWindow {
                             "深蓝色调"
                         ]
                         currentIndex: -1
-
-                        contentItem: Text {
-                            text: themeComboBox.displayText !== "" ? themeComboBox.displayText : "预设主题"
-                            color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
-                            font.pointSize: 11; padding: 8; verticalAlignment: Text.AlignVCenter
-                        }
-
-                        background: Rectangle {
-                            color: window.customBackground
-                            border.color: window.customAccent
-                            border.width: 1
-                            radius: 6
-                        }
-
-                        delegate: ItemDelegate {
-                            text: modelData; width: themeComboBox.width; height: 30
-                            contentItem: Text {
-                                text: modelData
-                                color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
-                                font.pointSize: 11; padding: 10; verticalAlignment: Text.AlignVCenter
-                            }
-                            highlighted: themeComboBox.highlightedIndex === index
-                            background: Rectangle {
-                                color: highlighted ? window.customAccent : window.customBackground
-                            }
-                        }
 
                         onCurrentIndexChanged: {
                             if (currentIndex >= 0) {
@@ -831,10 +889,10 @@ ApplicationWindow {
                 }
                 
                 Item { Layout.fillWidth: true }
-                
-                ComboBox {
+
+                StyledComboBox {
                     id: transitionComboBox
-                    Layout.preferredHeight: 28; Layout.preferredWidth: 200
+                    Layout.preferredWidth: 200
                     Layout.alignment: Qt.AlignVCenter
                     model: ["随机",
                            // 普通过渡效果（0-25）
@@ -850,61 +908,11 @@ ApplicationWindow {
                            "粒子爆炸（着色器）", "极光流动（着色器）", "赛博朋克故障（着色器）", "黑洞吞噬（着色器）",
                            "全息投影（着色器）", "光速穿越（着色器）"]
                     currentIndex: 0
-                    
-                    // 自定义popup内容，使用ListView并设置滚动条始终可见
+
                     popup {
-                        // 设置popup高度（增加以容纳更多选项）
                         height: 380
+                    }
 
-                        // 自定义contentItem为ListView
-                        contentItem: ListView {
-                            clip: true
-                            // 高度调整为容纳52个选项（每个30px，约52行）
-                            implicitHeight: 360
-                            // 使用delegateModel，仅在popup可见时加载
-                            model: transitionComboBox.popup.visible ? transitionComboBox.delegateModel : null
-                            currentIndex: transitionComboBox.highlightedIndex
-
-                            // 关键设置：让滚动条始终可见，保持与其他组件一致的样式
-                            ScrollBar.vertical: ScrollBar {
-                                width: 8
-                                policy: ScrollBar.AlwaysOn
-                                active: true
-                                background: Rectangle {
-                                    color: window.customBackground
-                                    radius: 4
-                                }
-                                contentItem: Rectangle {
-                                    radius: 4
-                                    color: window.customAccent
-                                }
-                            }
-                        }
-                    }
-                    
-                    contentItem: Text {
-                        text: transitionComboBox.displayText; color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
-                        font.pointSize: 11; padding: 8; verticalAlignment: Text.AlignVCenter
-                    }
-                    
-                    background: Rectangle {
-                        color: window.customBackground
-                        border.color: window.customAccent
-                        border.width: 1
-                        radius: 6
-                    }
-                    delegate: ItemDelegate {
-                        text: modelData; width: transitionComboBox.width; height: 30
-                        contentItem: Text {
-                            text: modelData; color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
-                            font.pointSize: 11; padding: 10; verticalAlignment: Text.AlignVCenter
-                        }
-                        highlighted: transitionComboBox.highlightedIndex === index
-                        background: Rectangle {
-                            color: highlighted ? window.customAccent : window.customBackground
-                        }
-                    }
-                    
                     onCurrentIndexChanged: {
                         if (currentIndex === 0) {
                             // 随机模式
@@ -918,81 +926,25 @@ ApplicationWindow {
                     }
                 }
                 
-                ComboBox {
+                StyledComboBox {
                     id: durationComboBox
-                    Layout.preferredHeight: 28; Layout.preferredWidth: 120
+                    Layout.preferredWidth: 120
                     Layout.alignment: Qt.AlignVCenter
                     model: ["无过渡", "0.5秒", "1秒", "2秒", "3秒", "4秒", "5秒", "6秒", "7秒", "8秒"]
                     currentIndex: 2
-                    
-                    contentItem: Text {
-                    text: durationComboBox.displayText; color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
-                    font.pointSize: 11; padding: 8; verticalAlignment: Text.AlignVCenter
-                }
-                    
-                    background: Rectangle {
-                    color: window.customBackground
-                    border.color: window.customAccent
-                    border.width: 1
-                    radius: 6
-                }
-                    delegate: ItemDelegate {
-                        text: modelData; width: durationComboBox.width; height: 30
-                        contentItem: Text {
-                            text: modelData; color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
-                            font.pointSize: 11; padding: 10; verticalAlignment: Text.AlignVCenter
-                        }
-                        highlighted: durationComboBox.highlightedIndex === index
-                        background: Rectangle {
-                            color: highlighted ? window.customAccent : window.customBackground
-                        }
-                    }
-                    
+
                     onCurrentIndexChanged: {
                         var durationValues = [0, 500, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
                         imageViewer.transitionDuration = durationValues[currentIndex]
                     }
                 }
                 
-                Button {
+                ThemeColorButton {
                     id: importButton
                     text: qsTr("导入图片")
-                    Layout.preferredWidth: 100; Layout.preferredHeight: 28
-                    hoverEnabled: true
+                    Layout.preferredWidth: 100
+                    Layout.preferredHeight: 28
                     onClicked: importImages()
-                    
-                    // 应用主题色和悬停效果
-                    background: Rectangle {
-                        id: buttonBackground
-                        color: customBackground
-                        border.color: customAccent
-                        border.width: 1
-                        radius: 4
-                        
-                        // 根据按钮的hovered状态动态改变背景色
-                        Behavior on color {
-                            ColorAnimation { duration: 200 }
-                        }
-                    }
-                    
-                    contentItem: Text {
-                    id: buttonText
-                    text: importButton.text
-                    color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
-                    font.pointSize: 11; horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-                
-                // 监控hovered状态变化，更新样式
-                onHoveredChanged: {
-                    if (hovered) {
-                        buttonBackground.color = customAccent
-                        buttonText.color = "white"
-                    } else {
-                        buttonBackground.color = customBackground
-                        buttonText.color = (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
-                    }
-                }
                 }
             }
         }
@@ -1151,16 +1103,15 @@ ApplicationWindow {
         anchors.centerIn: parent
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideOfArea
         standardButtons: Dialog.Ok | Dialog.Cancel
-        
+
         // 基础属性
         property int selectedGroupId: -1
         property int selectedParentGroupId: -1
         property string dialogMode: "import" // "import"、"moveGroup"或"moveImage"
-        
+
         // 导入图片相关属性
         property var selectedFiles: []
-        property bool isForUngrouped: false
-        
+
         // 调整分组相关属性
         property int groupToMoveId: -1 // 要调整的分组ID
         property int imageToMoveId: -1 // 要调整的图片ID
@@ -1191,42 +1142,18 @@ ApplicationWindow {
                 spacing: 10
                 
                 // 新建分组输入框
-                TextField {
+                StyledTextField {
                     id: groupNameInput
                     placeholderText: "输入分组名称"
-                    placeholderTextColor: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#666666" : "#888888"
-                    color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
-                    font.pointSize: 11
-                    Layout.fillWidth: true // 填充剩余宽度
-                    Layout.preferredHeight: 28
-                    
-                    background: Rectangle {
-                        color: window.customBackground
-                        border.color: window.customAccent
-                        border.width: 1
-                        radius: 6
-                    }
+                    Layout.fillWidth: true
                 }
                 
                 // 新建分组按钮
-                Button {
+                ThemeColorButton {
                     text: "新建分组"
                     Layout.preferredHeight: 28
-                    Layout.preferredWidth: 100 // 固定宽度
-                    
-                    background: Rectangle {
-                        color: window.customAccent
-                        radius: 6
-                    }
-                    
-                    contentItem: Text {
-                        text: parent.text
-                        color: Universal.foreground
-                        font.pointSize: 11
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    
+                    Layout.preferredWidth: 100
+
                     onClicked: {
                         let groupName = groupNameInput.text.trim()
                         if (groupName === "") {
@@ -1288,9 +1215,6 @@ ApplicationWindow {
                     break
                 case "import":
                     handleImportImages()
-                    break
-                case "assign":
-                    handleAssignGroup()
                     break
                 default:
                     console.error("Unknown dialog mode: " + groupDialog.dialogMode)
@@ -1379,18 +1303,8 @@ ApplicationWindow {
             database.startAsyncImport(selectedFiles, parentGroupId)
             console.log("异步导入已启动")
         }
-        
-        // 处理为未分组图片分配分组
-        function handleAssignGroup() {
-            if (groupDialog.isForUngrouped) {
-                // 为未分组图片分配分组的逻辑
-                // 这里需要实现
-                console.log("=== 为未分组图片分配分组 ===")
-                console.log("Selected group ID: " + groupDialog.selectedGroupId)
-            }
-        }
     }
-    
+
     // 右键菜单
     Menu {
         id: groupContextMenu
@@ -1498,23 +1412,12 @@ ApplicationWindow {
             }
             
             // 输入框
-            TextField {
+            StyledTextField {
                 id: renameTextField
                 placeholderText: "输入新名称"
-                placeholderTextColor: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#666666" : "#888888"
-                color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
-                font.pointSize: 11
                 padding: 8
                 Layout.fillWidth: true
-                Layout.preferredHeight: 28
                 Layout.minimumWidth: 350
-                
-                background: Rectangle {
-                    color: window.customBackground
-                    border.color: window.customAccent
-                    border.width: 1
-                    radius: 6
-                }
             }
         }
     }
@@ -1599,7 +1502,6 @@ ApplicationWindow {
         onAccepted: {
             // 保存选中的文件
             groupDialog.selectedFiles = fileDialog.selectedFiles
-            groupDialog.isForUngrouped = false
             groupDialog.dialogMode = "import"
             // 打开分组选择对话框
             groupDialog.open()
@@ -1662,12 +1564,6 @@ ApplicationWindow {
     
     function importImages() {
         fileDialog.open();
-    }
-    
-    function assignGroupToUngrouped() {
-        groupDialog.isForUngrouped = true
-        // 打开分组选择对话框
-        groupDialog.open()
     }
     
     // 背景色选择对话框

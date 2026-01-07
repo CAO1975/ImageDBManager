@@ -177,37 +177,6 @@ Item {
         }
     }
     
-    // 查找并选中父分组（简化版本，使用父子关系映射）
-    function findAndSelectParentGroup(childGroupId) {
-        console.log("findAndSelectParentGroup called for child ID:", childGroupId);
-        
-        // 查找当前选中分组的父分组
-        var parentId = groupTree.groupParentMap[childGroupId];
-        
-        if (parentId) {
-            console.log("Found parent group ID:", parentId);
-            
-            // 查找父分组在模型中的位置
-            for (var i = 0; i < mainGroupListModel.count; i++) {
-                if (mainGroupListModel.get(i).id === parentId) {
-                    console.log("Found parent group in model, setting index:", i);
-                    groupListView.currentIndex = i;
-                    currentSelectedGroupId = parentId;
-                    groupTree.groupSelected(parentId);
-                    return;
-                }
-            }
-        }
-        
-        // 如果没有找到父分组，默认选择第一个分组
-        if (mainGroupListModel.count > 0) {
-            console.log("No parent group found, selecting first group");
-            groupListView.currentIndex = 0;
-            currentSelectedGroupId = mainGroupListModel.get(0).id;
-            groupTree.groupSelected(currentSelectedGroupId);
-        }
-    }
-    
     // 切换分组展开状态
     function toggleGroupExpanded(groupId) {
         console.log("Toggling group expanded state for group ID:", groupId, "currentSelectedGroupId:", currentSelectedGroupId);
@@ -374,8 +343,7 @@ Item {
         model: mainGroupListModel
         delegate: groupDelegate
         clip: true
-        
-        // 滚动条样式
+
         ScrollBar.vertical: ScrollBar {
             width: 8
             policy: ScrollBar.AlwaysOn

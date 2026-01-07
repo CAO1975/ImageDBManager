@@ -31,6 +31,11 @@ QImage ImageProvider::requestImage(const QString &id, QSize *size, const QSize &
         *size = image.size();
     }
     
+    // 发射图片尺寸信号给QML（仅针对原始图片，避免频繁发射）
+    if (!useThumbnail) {
+        emit m_database->imageSizeLoaded(imageId, image.size().width(), image.size().height());
+    }
+    
     // 如果请求了特定大小，进行缩放
     if (requestedSize.width() > 0 && requestedSize.height() > 0) {
         image = image.scaled(requestedSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);

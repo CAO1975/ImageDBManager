@@ -35,15 +35,32 @@ Item {
     property point imageOffset: Qt.point(0, 0)
     
     // 添加着色器过渡相关属性
-    property bool useShaderTransition: true
-    property real shaderTransitionProgress: 0
     property int shaderEffectType: 0  // 0 = 溶解
     
-    // 着色器属性中间变量，避免命名冲突
-    property real shaderProgress: 0
-    property int shaderEffectTypeValue: 0
-    
+    // 边界约束函数
+    function constrainImageOffset() {
+        // 使用 paintedWidth/paintedHeight 获取 Image.PreserveAspectFit 模式下的实际显示尺寸
+        var actualImageWidth = currentImageItem.paintedWidth * scaleFactor
+        var actualImageHeight = currentImageItem.paintedHeight * scaleFactor
+        var overflowX = actualImageWidth - parent.width
+        var overflowY = actualImageHeight - parent.height
 
+        if (overflowX > 0) {
+            var minX = -overflowX / 2
+            var maxX = overflowX / 2
+            imageOffset.x = Math.min(maxX, Math.max(minX, imageOffset.x))
+        } else {
+            imageOffset.x = 0
+        }
+
+        if (overflowY > 0) {
+            var minY = -overflowY / 2
+            var maxY = overflowY / 2
+            imageOffset.y = Math.min(maxY, Math.max(minY, imageOffset.y))
+        } else {
+            imageOffset.y = 0
+        }
+    }
     
     function loadImage(imageId) {
         if (imageId === currentImageId && !transitioning) return
@@ -131,7 +148,6 @@ Item {
                 // 设置着色器过渡效果类型：0-29
                 var shaderEffectIndex = selectedTransition - 26;  // 映射到着色器效果索引0-29
                 shaderEffectType = shaderEffectIndex;
-                shaderEffectTypeValue = shaderEffectIndex;
                 console.log("Starting shader transition: selectedTransition=", selectedTransition, "shaderEffectIndex=", shaderEffectIndex, "effectType=", shaderEffectType, "transitionProgress=", shaderEffectItem.transitionProgress)
                 // 显示着色器过渡组件，将普通图片项隐藏（但保持ShaderEffectSource可见）
                 shaderTransition.visible = true
@@ -343,7 +359,7 @@ Item {
                 // 将QML属性映射到着色器uniform变量
                 // 着色器中使用progress和effectType作为uniform变量
                 property real progress: transitionProgress
-                property int effectType: shaderEffectTypeValue
+                property int effectType: shaderEffectType
                 property vector3d backgroundColor: Qt.vector3d(customBackground.r, customBackground.g, customBackground.b)
 
                 // 监听状态变化
@@ -381,27 +397,11 @@ Item {
             onPositionChanged: {
                 if (isDragging && !transitioning) {
                     var delta = Qt.point(mouseX - lastMousePos.x, mouseY - lastMousePos.y)
-                    var newX = imageOffset.x + delta.x
-                    var newY = imageOffset.y + delta.y
-                    imageOffset = Qt.point(newX, newY)
+                    imageOffset = Qt.point(imageOffset.x + delta.x, imageOffset.y + delta.y)
                     lastMousePos = Qt.point(mouseX, mouseY)
                     
-                    var actualImageWidth = currentImageItem.width * currentImageItem.scale
-                    var actualImageHeight = currentImageItem.height * currentImageItem.scale
-                    var overflowX = actualImageWidth - parent.width
-                    var overflowY = actualImageHeight - parent.height
-                    
-                    if (overflowX > 0) {
-                        var minX = -overflowX / 2
-                        var maxX = overflowX / 2
-                        imageOffset.x = Math.min(maxX, Math.max(minX, imageOffset.x))
-                    } else imageOffset.x = 0
-                    
-                    if (overflowY > 0) {
-                        var minY = -overflowY / 2
-                        var maxY = overflowY / 2
-                        imageOffset.y = Math.min(maxY, Math.max(minY, imageOffset.y))
-                    } else imageOffset.y = 0
+                    // 应用边界约束
+                    constrainImageOffset()
                 }
             }
             
@@ -411,22 +411,8 @@ Item {
                     scaleFactor *= scaleDelta
                     scaleFactor = Math.max(minScale, Math.min(maxScale, scaleFactor))
                     
-                    var actualImageWidth = currentImageItem.width * scaleFactor
-                    var actualImageHeight = currentImageItem.height * scaleFactor
-                    var overflowX = actualImageWidth - parent.width
-                    var overflowY = actualImageHeight - parent.height
-                    
-                    if (overflowX > 0) {
-                        var minX = -overflowX / 2
-                        var maxX = overflowX / 2
-                        imageOffset.x = Math.min(maxX, Math.max(minX, imageOffset.x))
-                    } else imageOffset.x = 0
-                    
-                    if (overflowY > 0) {
-                        var minY = -overflowY / 2
-                        var maxY = overflowY / 2
-                        imageOffset.y = Math.min(maxY, Math.max(minY, imageOffset.y))
-                    } else imageOffset.y = 0
+                    // 应用边界约束
+                    constrainImageOffset()
                 }
                 event.accepted = true
             }

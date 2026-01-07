@@ -92,3 +92,10 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::QuickControls2
     Qt6::Concurrent
 )
+
+# 创建 Windows 资源文件以设置图标
+if(WIN32)
+    set(RC_FILE "${CMAKE_CURRENT_SOURCE_DIR}/resource.rc")
+    target_sources(${PROJECT_NAME} PRIVATE ${RC_FILE})
+endif()
+

@@ -89,13 +89,7 @@ int main(int argc, char *argv[])
     
     // 向QML注册C++类型和实例
     engine.rootContext()->setContextProperty("database", database);
-    
-    // 读取所有设置并注册到QML上下文
-    QVariantMap settings = database->getAllSettings();
-    engine.rootContext()->setContextProperty("appSettings", settings);
-    logMessage = "Settings loaded successfully";
-    qDebug() << logMessage;
-    
+
     // 注册自定义图片提供器，QML可以通过image://imageprovider/imageId访问
     engine.addImageProvider("imageprovider", new ImageProvider(database));
     

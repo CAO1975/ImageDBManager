@@ -1,0 +1,4 @@
+#include <windows.h>
+
+// Windows 资源文件：设置应用程序图标
+IDR_ICON1 ICON DISCARDABLE "AppIcon.ico"

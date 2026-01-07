@@ -6,9 +6,7 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QImage>
-#include <QPixmap>
 #include <QUrl>
-#include <QStandardItemModel>
 #include <QtConcurrent>
 #include <QFutureWatcher>
 
@@ -23,9 +21,7 @@ public:
     Q_INVOKABLE bool initialize();
     Q_INVOKABLE bool insertImage(const QString &fileName, int groupId = -1);
     Q_INVOKABLE bool insertImage(const QUrl &fileUrl, int groupId = -1);
-    bool insertImage(const QString &fileName, const QImage &image, int groupId = -1);// 获取缩略图（兼容旧接口）
-    Q_INVOKABLE QString getImage(int id); // 获取缩略图（兼容旧接口）
-    Q_INVOKABLE QString getOriginalImage(int id); // 获取原始图片（兼容旧接口）
+    bool insertImage(const QString &fileName, const QImage &image, int groupId = -1);
     Q_INVOKABLE QString getImageFilename(int id);
     Q_INVOKABLE QList<int> getAllImageIds(int groupId = -1);
     Q_INVOKABLE bool removeImage(int id);
@@ -33,7 +29,6 @@ public:
     Q_INVOKABLE bool updateImageGroup(int imageId, int newGroupId);
     Q_INVOKABLE QString getLastError() const;
     Q_INVOKABLE int getImageByteSize(int imageId);
-    Q_INVOKABLE QSize getImageSize(int imageId);
     
     // 新增：供QQuickImageProvider使用的方法
     QImage getImageAsQImage(int id, bool useThumbnail = true);
@@ -47,9 +42,6 @@ public:
     Q_INVOKABLE bool deleteGroup(int groupId); // 删除分组（级联删除子分组和图片）
     Q_INVOKABLE int getSubgroupCount(int groupId); // 新增：获取子分组数量
     Q_INVOKABLE int getImageCountForGroup(int groupId); // 新增：获取分组下的图片数量
-    Q_INVOKABLE QVariantList getChildGroups(int parentId);
-    Q_INVOKABLE QStandardItemModel* getGroupModel();
-    Q_INVOKABLE void refreshGroupModel();
     Q_INVOKABLE int getGroupIdByName(const QString &name, int parentId = -1);
 
     Q_INVOKABLE QString getGroupPath(int groupId); // 新增：获取分组完整路径
@@ -65,7 +57,6 @@ public:
     // 用户设置相关方法
     Q_INVOKABLE bool saveSetting(const QString &key, const QString &value);
     Q_INVOKABLE QString getSetting(const QString &key, const QString &defaultValue = "");
-    Q_INVOKABLE bool saveAllSettings(const QVariantMap &settings);
     Q_INVOKABLE QVariantMap getAllSettings();
 
 signals:
@@ -78,6 +69,9 @@ signals:
     void exportProgress(int current, int total, const QString &currentFile, const QString &targetFolder);
     void exportFinished(bool success, int exportedCount, int totalCount, const QString &targetFolder);
     void exportError(const QString &error);
+    
+    // 图片尺寸信号（供ImageProvider使用）
+    void imageSizeLoaded(int imageId, int width, int height);
 
 private slots:
     // 内部槽函数
@@ -87,13 +81,10 @@ private slots:
 private:
     QSqlDatabase m_db;
     QString m_lastError;
-    
+
     // 辅助方法
     QVariantList getGroupsRecursive(int parentId);
-    void buildGroupModel();
-    QStandardItemModel* m_groupModel = nullptr;
     bool createGroupsTable();
-    bool updateImagesTable();
     
     // 异步导入相关成员
     QFutureWatcher<bool> *m_importWatcher;

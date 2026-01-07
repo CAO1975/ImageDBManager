@@ -5,11 +5,9 @@
 #include <QSqlError>
 #include <QBuffer>
 #include <QFileInfo>
-#include <QDateTime>
 #include <QImage>
 #include <QByteArray>
 #include <QString>
-#include <QStandardItem>
 
 Database::Database(QObject *parent)
     : QObject(parent),
@@ -93,8 +91,8 @@ bool Database::initialize()
         return false;
     }
     
-    // 设置内存映射大小为1GB（适合16GB内存的64位程序）
-    if (!query.exec("PRAGMA mmap_size = 1073741824")) {
+    // 设置内存映射大小为512MB（适合千张以上图片的大数据库场景）
+    if (!query.exec("PRAGMA mmap_size = 536870912")) {
         m_lastError = query.lastError().text();
         return false;
     }
@@ -228,46 +226,6 @@ QString Database::getSetting(const QString &key, const QString &defaultValue)
     return defaultValue;
 }
 
-// 保存多个设置
-bool Database::saveAllSettings(const QVariantMap &settings)
-{
-    // 开始事务以提高性能
-    if (!m_db.transaction()) {
-        m_lastError = m_db.lastError().text();
-        return false;
-    }
-    
-    QSqlQuery query;
-    QString sql = R"(
-        INSERT INTO user_settings (setting_key, setting_value, updated_time)
-        VALUES (:key, :value, CURRENT_TIMESTAMP)
-        ON CONFLICT(setting_key) DO UPDATE SET
-            setting_value = :value,
-            updated_time = CURRENT_TIMESTAMP
-    )";
-    
-    query.prepare(sql);
-    
-    for (auto it = settings.constBegin(); it != settings.constEnd(); ++it) {
-        query.bindValue(":key", it.key());
-        query.bindValue(":value", it.value().toString());
-        
-        if (!query.exec()) {
-            m_db.rollback();
-            m_lastError = query.lastError().text();
-            return false;
-        }
-    }
-    
-    // 提交事务
-    if (!m_db.commit()) {
-        m_lastError = m_db.lastError().text();
-        return false;
-    }
-    
-    return true;
-}
-
 // 获取所有设置
 QVariantMap Database::getAllSettings()
 {
@@ -377,85 +335,6 @@ bool Database::insertImage(const QString &fileName, const QImage &image, int gro
     }
     
     return true;
-}
-
-QString Database::getImage(int id)
-{
-    QSqlQuery query;
-    // 优先使用缩略图数据，提高加载速度
-    query.prepare("SELECT thumbnail, image_format FROM images WHERE id = ?");
-    query.addBindValue(id);
-    
-    if (!query.exec() || !query.next()) {
-        m_lastError = query.lastError().text();
-        return QString();
-    }
-    
-    QByteArray imageData = query.value(0).toByteArray();
-    QString imageFormat = query.value(1).toString();
-    
-    // 如果缩略图不存在，回退到原始图片
-    if (imageData.isEmpty()) {
-        query.prepare("SELECT image_data, image_format FROM images WHERE id = ?");
-        query.addBindValue(id);
-        if (!query.exec() || !query.next()) {
-            return QString();
-        }
-        imageData = query.value(0).toByteArray();
-        imageFormat = query.value(1).toString();
-    }
-    
-    // 设置正确的MIME类型
-    QString mimeType = "image/jpeg";
-    if (imageFormat == "PNG") {
-        mimeType = "image/png";
-    } else if (imageFormat == "BMP") {
-        mimeType = "image/bmp";
-    } else if (imageFormat == "GIF") {
-        mimeType = "image/gif";
-    } else if (imageFormat == "WEBP") {
-        mimeType = "image/webp";
-    }
-    
-    // 将图片数据转换为Base64编码的Data URI字符串
-    QString base64Image = QString::fromLatin1(imageData.toBase64());
-    QString dataUri = QString("data:%1;base64,%2").arg(mimeType).arg(base64Image);
-    
-    return dataUri;
-}
-
-QString Database::getOriginalImage(int id)
-{
-    QSqlQuery query;
-    // 直接获取原始图片数据和格式
-    query.prepare("SELECT image_data, image_format FROM images WHERE id = ?");
-    query.addBindValue(id);
-    
-    if (!query.exec() || !query.next()) {
-        m_lastError = query.lastError().text();
-        return QString();
-    }
-    
-    QByteArray imageData = query.value(0).toByteArray();
-    QString imageFormat = query.value(1).toString();
-    
-    // 设置正确的MIME类型
-    QString mimeType = "image/jpeg";
-    if (imageFormat == "PNG") {
-        mimeType = "image/png";
-    } else if (imageFormat == "BMP") {
-        mimeType = "image/bmp";
-    } else if (imageFormat == "GIF") {
-        mimeType = "image/gif";
-    } else if (imageFormat == "WEBP") {
-        mimeType = "image/webp";
-    }
-    
-    // 将图片数据转换为Base64编码的Data URI字符串
-    QString base64Image = QString::fromLatin1(imageData.toBase64());
-    QString dataUri = QString("data:%1;base64,%2").arg(mimeType).arg(base64Image);
-    
-    return dataUri;
 }
 
 QString Database::getImageFilename(int id)
@@ -655,91 +534,6 @@ bool Database::updateGroupParent(int groupId, int newParentId)
     }
     
     return true;
-}
-
-QVariantList Database::getChildGroups(int parentId)
-{
-    QVariantList groups;
-    QSqlQuery query;
-    
-    if (parentId > 0) {
-        query.prepare("SELECT id, name FROM groups WHERE parent_id = ? ORDER BY name");
-        query.addBindValue(parentId);
-    } else {
-        query.prepare("SELECT id, name FROM groups WHERE parent_id IS NULL ORDER BY name");
-    }
-    
-    if (!query.exec()) {
-        m_lastError = query.lastError().text();
-        return groups;
-    }
-    
-    while (query.next()) {
-        QVariantMap group;
-        group["id"] = query.value(0).toInt();
-        group["name"] = query.value(1).toString();
-        groups.append(group);
-    }
-    
-    return groups;
-}
-
-QStandardItemModel* Database::getGroupModel()
-{
-    if (!m_groupModel) {
-        m_groupModel = new QStandardItemModel(this);
-        m_groupModel->setColumnCount(2);
-        m_groupModel->setHorizontalHeaderLabels({"name", "id"});
-        buildGroupModel();
-    }
-    return m_groupModel;
-}
-
-void Database::buildGroupModel()
-{
-    if (!m_groupModel)
-        return;
-
-    m_groupModel->removeRows(0, m_groupModel->rowCount());
-
-    QVariantList groups = getAllGroups();
-
-    std::function<void(const QVariantList&, QStandardItem*)> addRecursive;
-    addRecursive = [&](const QVariantList &list, QStandardItem *parent){
-        for (const QVariant &v : list) {
-            QVariantMap gm = v.toMap();
-            QString name = gm.value("name").toString();
-            int id = gm.value("id").toInt();
-
-            QStandardItem *nameItem = new QStandardItem(name);
-            QStandardItem *idItem = new QStandardItem(QString::number(id));
-
-            if (parent) {
-                parent->appendRow(QList<QStandardItem*>() << nameItem << idItem);
-            } else {
-                m_groupModel->appendRow(QList<QStandardItem*>() << nameItem << idItem);
-            }
-
-            if (gm.contains("children")) {
-                QVariantList children = gm.value("children").toList();
-                if (!children.isEmpty()) {
-                    addRecursive(children, nameItem);
-                }
-            }
-        }
-    };
-
-    addRecursive(groups, nullptr);
-}
-
-void Database::refreshGroupModel()
-{
-    if (!m_groupModel) {
-        // ensure model exists
-        getGroupModel();
-        return;
-    }
-    buildGroupModel();
 }
 
 bool Database::removeImage(int id)
@@ -993,26 +787,6 @@ int Database::getImageByteSize(int imageId)
     return query.value(0).toInt();
 }
 
-QSize Database::getImageSize(int imageId)
-{
-    QSqlQuery query;
-    query.prepare("SELECT image_data FROM images WHERE id = ?");
-    query.addBindValue(imageId);
-    
-    if (!query.exec() || !query.next()) {
-        m_lastError = query.lastError().text();
-        return QSize();
-    }
-    
-    QByteArray imageData = query.value(0).toByteArray();
-    QImage image;
-    if (image.loadFromData(imageData)) {
-        return image.size();
-    }
-    
-    return QSize();
-}
-
 QString Database::getGroupPath(int groupId)
 {
     if (groupId <= 0) {
@@ -1047,10 +821,6 @@ QString Database::getGroupPath(int groupId)
 // 异步导出实现
 void Database::startAsyncExport(int groupId, const QString &groupName, const QString &targetFolder)
 {
-    // 在主线程中获取所有需要导出的图片数据
-    QList<QPair<int, QByteArray>> exportData;
-    QStringList filenames;
-    
     // 获取分组内的所有图片ID
     QList<int> imageIds = getAllImageIds(groupId);
     int totalCount = imageIds.size();
@@ -1070,22 +840,8 @@ void Database::startAsyncExport(int groupId, const QString &groupName, const QSt
     m_exportSuccessCount = 0;
     m_exportCancelled = false;
     
-    // 在主线程中获取所有图片数据
-    for (int imageId : imageIds) {
-        QSqlQuery query(m_db);
-        query.prepare("SELECT image_data, filename FROM images WHERE id = ?");
-        query.addBindValue(imageId);
-        
-        if (query.exec() && query.next()) {
-            QByteArray imageData = query.value(0).toByteArray();
-            QString filename = query.value(1).toString();
-            exportData.append(qMakePair(imageId, imageData));
-            filenames.append(filename);
-        }
-    }
-    
-    // 使用QtConcurrent在后台线程执行导出
-    auto exportFunction = [this, exportData, filenames, totalCount, groupName, targetFolder]() {
+    // 使用QtConcurrent在后台线程执行导出（流式处理）
+    auto exportFunction = [this, imageIds, totalCount, groupName, targetFolder]() {
         try {
             int successCount = 0;
             
@@ -1094,8 +850,30 @@ void Database::startAsyncExport(int groupId, const QString &groupName, const QSt
                     break;
                 }
                 
-                QString filename = filenames[i];
-                QByteArray imageData = exportData[i].second;
+                int imageId = imageIds[i];
+                
+                // 在后台线程中逐张从数据库查询图片数据
+                QString filename;
+                QByteArray imageData;
+                
+                {
+                    QSqlQuery query(m_db);
+                    query.prepare("SELECT image_data, filename FROM images WHERE id = ?");
+                    query.addBindValue(imageId);
+                    
+                    if (!query.exec() || !query.next()) {
+                        emit exportError(QString("无法读取图片 ID: %1").arg(imageId));
+                        continue;
+                    }
+                    
+                    imageData = query.value(0).toByteArray();
+                    filename = query.value(1).toString();
+                }
+                
+                if (imageData.isEmpty()) {
+                    emit exportError(QString("图片 ID: %1 数据为空").arg(imageId));
+                    continue;
+                }
                 
                 // 构建完整的目标文件路径
                 QString targetFilePath = targetFolder + "/" + groupName + "/" + filename;
@@ -1118,7 +896,11 @@ void Database::startAsyncExport(int groupId, const QString &groupName, const QSt
                     
                     if (bytesWritten == imageData.size()) {
                         successCount++;
+                    } else {
+                        emit exportError(QString("写入文件失败: %1").arg(filename));
                     }
+                } else {
+                    emit exportError(QString("无法打开文件: %1").arg(filename));
                 }
                 
                 // 发出进度信号
