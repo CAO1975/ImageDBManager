@@ -25,10 +25,10 @@ set(QT_NO_LINK_QTMAIN TRUE)
 set(CMAKE_PREFIX_PATH "D:/Programming/QT/6.10.1/mingw_64")
 
 # 禁用不必要的Qt特性（必须在find_package之前设置）
-set(QT_FEATURE_opengl OFF CACHE BOOL "Disable OpenGL support" FORCE)
+# set(QT_FEATURE_opengl OFF CACHE BOOL "Disable OpenGL support" FORCE)
 set(QT_FEATURE_widgets OFF CACHE BOOL "Disable Widgets support" FORCE)
 set(QT_FEATURE_testlib OFF CACHE BOOL "Disable Testlib support" FORCE)
-set(QT_FEATURE_gui_opengl OFF CACHE BOOL "Disable OpenGL in GUI" FORCE)
+# set(QT_FEATURE_gui_opengl OFF CACHE BOOL "Disable OpenGL in GUI" FORCE)
 
 # 仅链接使用的Controls样式
 set(QT_QUICK_CONTROLS_STYLE "Universal" CACHE STRING "Qt Quick Controls style" FORCE)

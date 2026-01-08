@@ -91,6 +91,7 @@ Item {
         slideLeftUpToRightDownAnimation.stop(); slideRightDownToLeftUpAnimation.stop()
         flipAnimation.stop(); flipReverseAnimation.stop(); flipXDownAnimation.stop(); flipXUpAnimation.stop(); flipXTopAnimation.stop(); flipXBottomAnimation.stop()
         scaleTransitionAnimation.stop(); flipDiagonalAnimation.stop(); flipDiagonalReverseAnimation.stop(); flipYLeftAnimation.stop(); flipYRightAnimation.stop()
+        spiralFlyAnimation.stop()
         
         // 停止着色器过渡定时器
         updateTimer.stop();
@@ -116,10 +117,10 @@ Item {
             
             var selectedTransition = transitionType
             if (selectedTransition === -1) {
-                // 随机选择过渡效果，范围0-51（52种效果）
-                // 0-25: 26种普通过渡效果
-                // 26-51: 26种着色器过渡效果
-                selectedTransition = Math.floor(Math.random() * 57);
+                // 随机选择过渡效果，范围0-69（70种效果）
+                // 0-26: 27种普通过渡效果
+                // 27-69: 43种着色器过渡效果
+                selectedTransition = Math.floor(Math.random() * 70);
             }
 
             resetTransform()
@@ -129,24 +130,24 @@ Item {
             nextImageItem.x = 0; nextImageItem.y = 0
             nextImageItem.scale = 1.0; nextImageItem.rotation = 0
 
-            // 对于随机点过渡效果，需要确保两张图片都可见
-            if (selectedTransition >= 26 && selectedTransition <= 55) {
-                // 着色器过渡：26-55（30种效果）
+            // 对于着色器过渡效果，需要确保两张图片都可见
+            if (selectedTransition >= 27 && selectedTransition <= 69) {
+                // 着色器过渡：27-69（43种效果）
                 nextImageItem.opacity = 1.0;
                 currentImageItem.visible = true;
                 nextImageItem.visible = true;
             } else {
-                // 普通过渡：0-25
+                // 普通过渡：0-26
                 nextImageItem.opacity = 0.0;
                 nextImageItem.visible = true;  // 确保图片项可见，即使透明度为0
             }
 
             currentImageItem.source = currentImage || ""; nextImageItem.source = nextImage || ""
 
-            // 如果是26-55，则使用着色器过渡
-            if (selectedTransition >= 26 && selectedTransition <= 55) {
-                // 设置着色器过渡效果类型：0-29
-                var shaderEffectIndex = selectedTransition - 26;  // 映射到着色器效果索引0-29
+            // 如果是27-69，则使用着色器过渡
+            if (selectedTransition >= 27 && selectedTransition <= 69) {
+                // 设置着色器过渡效果类型：0-42
+                var shaderEffectIndex = selectedTransition - 27;  // 映射到着色器效果索引0-42
                 shaderEffectType = shaderEffectIndex;
                 console.log("Starting shader transition: selectedTransition=", selectedTransition, "shaderEffectIndex=", shaderEffectIndex, "effectType=", shaderEffectType, "transitionProgress=", shaderEffectItem.transitionProgress)
                 // 显示着色器过渡组件，将普通图片项隐藏（但保持ShaderEffectSource可见）
@@ -194,6 +195,7 @@ Item {
                     case 23: flipXBottomAnimation.start(); break
                     case 24: flipYLeftAnimation.start(); break
                     case 25: flipYRightAnimation.start(); break
+                    case 26: spiralFlyAnimation.start(); break
                     default: fadeAnimation.start(); break
                 }
             }
@@ -1379,7 +1381,153 @@ Item {
             }
         }
     }
-    
+
+    // 螺旋飞出飞入动画 - 旧图片螺旋变小向中心飞去消失，新图片从中心螺旋变大飞回
+    SequentialAnimation {
+        id: spiralFlyAnimation
+
+        // 第一阶段：旧图片螺旋飞出
+        ParallelAnimation {
+            // 旧图片：缩小、旋转、螺旋向中心移动、透明度降低
+            NumberAnimation {
+                target: currentImageItem
+                property: "scale"
+                from: 1.0
+                to: 0.0
+                duration: transitionDuration / 2
+                easing.type: Easing.InOutQuad
+            }
+            NumberAnimation {
+                target: currentImageItem
+                property: "rotation"
+                from: 0
+                to: 360  // 旋转1圈（360度）
+                duration: transitionDuration / 2
+                easing.type: Easing.InOutQuad
+            }
+            // X轴螺旋移动：从0开始，先左移再右移，回到中心
+            SequentialAnimation {
+                NumberAnimation {
+                    target: currentImageItem
+                    property: "x"
+                    from: 0
+                    to: -200
+                    duration: transitionDuration / 4
+                    easing.type: Easing.InOutQuad
+                }
+                NumberAnimation {
+                    target: currentImageItem
+                    property: "x"
+                    from: -200
+                    to: 0
+                    duration: transitionDuration / 4
+                    easing.type: Easing.InOutQuad
+                }
+            }
+            // Y轴螺旋移动：从0开始，先上移再下移，回到中心
+            SequentialAnimation {
+                NumberAnimation {
+                    target: currentImageItem
+                    property: "y"
+                    from: 0
+                    to: -200
+                    duration: transitionDuration / 4
+                    easing.type: Easing.InOutQuad
+                }
+                NumberAnimation {
+                    target: currentImageItem
+                    property: "y"
+                    from: -200
+                    to: 0
+                    duration: transitionDuration / 4
+                    easing.type: Easing.InOutQuad
+                }
+            }
+            NumberAnimation {
+                target: currentImageItem
+                property: "opacity"
+                from: 1.0
+                to: 0.0
+                duration: transitionDuration / 2
+                easing.type: Easing.InOutQuad
+            }
+        }
+
+        // 第二阶段：新图片螺旋飞入
+        ParallelAnimation {
+            // 新图片：从中心开始，放大、螺旋向外移动、透明度增加
+            NumberAnimation {
+                target: nextImageItem
+                property: "scale"
+                from: 0.0
+                to: 1.0
+                duration: transitionDuration / 2
+                easing.type: Easing.InOutQuad
+            }
+            // 旋转动画：直接旋转回来显示原图
+            NumberAnimation {
+                target: nextImageItem
+                property: "rotation"
+                from: 360
+                to: 0
+                duration: transitionDuration / 2
+                easing.type: Easing.InOutQuad
+            }
+            // X轴螺旋移动：从0开始，先右移再左移，回到中心
+            SequentialAnimation {
+                NumberAnimation {
+                    target: nextImageItem
+                    property: "x"
+                    from: 0
+                    to: 200
+                    duration: transitionDuration / 4
+                    easing.type: Easing.InOutQuad
+                }
+                NumberAnimation {
+                    target: nextImageItem
+                    property: "x"
+                    from: 200
+                    to: 0
+                    duration: transitionDuration / 4
+                    easing.type: Easing.InOutQuad
+                }
+            }
+            // Y轴螺旋移动：从0开始，先下移再上移，回到中心
+            SequentialAnimation {
+                NumberAnimation {
+                    target: nextImageItem
+                    property: "y"
+                    from: 0
+                    to: 200
+                    duration: transitionDuration / 4
+                    easing.type: Easing.InOutQuad
+                }
+                NumberAnimation {
+                    target: nextImageItem
+                    property: "y"
+                    from: 200
+                    to: 0
+                    duration: transitionDuration / 4
+                    easing.type: Easing.InOutQuad
+                }
+            }
+            NumberAnimation {
+                target: nextImageItem
+                property: "opacity"
+                from: 0.0
+                to: 1.0
+                duration: transitionDuration / 2
+                easing.type: Easing.InOutQuad
+            }
+        }
+
+        onRunningChanged: {
+            if (!running && transitioning) {
+                endTransition();
+            }
+        }
+    }
+
     // 着色器过渡动画 - 用于控制着色器过渡进度
     NumberAnimation {
         id: shaderTransitionAnimation
