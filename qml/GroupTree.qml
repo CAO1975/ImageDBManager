@@ -6,18 +6,31 @@ Item {
     property color customBackground: '#112233'
     property color customAccent: '#30638f'
     id: groupTree
-    
-    // 添加背景色和边框，确保在任何容器中都有一致的外观
-    Rectangle {
-        anchors.fill: parent
-        color: customBackground
-        border.color: customAccent
-        border.width: 1
-        z: -1
-        // 添加圆角效果
-        radius: 8
+
+    // 可复用组件：主题化Rectangle
+    component ThemedRectangle: Rectangle {
+        property color bgColor: customBackground
+        property color accentColor: customAccent
+        property int borderWidth: 1
+        property real borderRadius: 8
+
+        color: bgColor
+        border.color: accentColor
+        border.width: borderWidth
+        radius: borderRadius
     }
-    
+
+    ThemedRectangle {
+        anchors.fill: parent
+        z: -1
+    }
+
+    // 根据背景颜色计算合适的文字颜色
+    function getTextColor(backgroundColor) {
+        let brightness = 0.299 * backgroundColor.r + 0.587 * backgroundColor.g + 0.114 * backgroundColor.b
+        return brightness > 0.5 ? "#000000" : "#FFFFFF"
+    }
+
     // 定义信号，用于通知父组件选择了分组
     signal groupSelected(int groupId)
     
@@ -276,7 +289,7 @@ Item {
                     width: parent.width - x
                     height: 24
                     text: model.name
-                    color: groupListView.currentIndex === index ? "#E8F4FD" : (0.299 * customBackground.r + 0.587 * customBackground.g + 0.114 * customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
+                    color: groupListView.currentIndex === index ? "#E8F4FD" : getTextColor(customBackground)
                     font.pointSize: 12
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight  // 文本过长时显示省略号

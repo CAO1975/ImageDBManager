@@ -40,7 +40,7 @@ ApplicationWindow {
     
     // 图片尺寸缓存
     property var imageSizeCache: ({})
-    
+
     // 连接数据库的图片尺寸信号
     Connections {
         target: database
@@ -50,11 +50,17 @@ ApplicationWindow {
         }
     }
 
+    // 根据背景颜色计算合适的文字颜色
+    function getTextColor(backgroundColor) {
+        let brightness = 0.299 * backgroundColor.r + 0.587 * backgroundColor.g + 0.114 * backgroundColor.b
+        return brightness > 0.5 ? "#000000" : "#FFFFFF"
+    }
+
     // 可复用组件：标题栏分隔符
     component TitleBarSeparator: Rectangle {
         width: 1
         height: 20
-        color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
+        color: getTextColor(window.customBackground)
         opacity: 0.3
         Layout.alignment: Qt.AlignVCenter
         Layout.leftMargin: 8
@@ -86,7 +92,7 @@ ApplicationWindow {
         contentItem: Text {
             id: btnText
             text: btn.text
-            color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
+            color: getTextColor(btn.bgColor)
             font.pointSize: 11
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
@@ -98,7 +104,7 @@ ApplicationWindow {
                 btnText.color = "white"
             } else {
                 btnBackground.color = btn.bgColor
-                btnText.color = (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
+                btnText.color = getTextColor(btn.bgColor)
             }
         }
     }
@@ -106,7 +112,7 @@ ApplicationWindow {
     // 可复用组件：主题化ComboBox
     component StyledComboBox: ComboBox {
         id: root
-        property color textColor: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
+        property color textColor: getTextColor(window.customBackground)
         property string placeholderText: ""
 
         Layout.preferredHeight: 28
@@ -119,11 +125,8 @@ ApplicationWindow {
             verticalAlignment: Text.AlignVCenter
         }
 
-        background: Rectangle {
-            color: window.customBackground
-            border.color: window.customAccent
-            border.width: 1
-            radius: 6
+        background: ThemedRectangle {
+            borderRadius: 6
         }
 
         delegate: ItemDelegate {
@@ -132,7 +135,7 @@ ApplicationWindow {
             height: 30
             contentItem: Text {
                 text: modelData
-                color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
+                color: getTextColor(window.customBackground)
                 font.pointSize: 11
                 padding: 10
                 verticalAlignment: Text.AlignVCenter
@@ -149,11 +152,8 @@ ApplicationWindow {
             implicitHeight: contentItem.implicitHeight
             padding: 1
 
-            background: Rectangle {
-                color: window.customBackground
-                border.color: window.customAccent
-                border.width: 1
-                radius: 4
+            background: ThemedRectangle {
+                borderRadius: 4
             }
 
             contentItem: ListView {
@@ -171,19 +171,16 @@ ApplicationWindow {
     // 可复用组件：主题化TextField
     component StyledTextField: TextField {
         id: root
-        property color textColor: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
+        property color textColor: getTextColor(window.customBackground)
 
         Layout.preferredHeight: 28
 
-        placeholderTextColor: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#666666" : "#888888"
+        placeholderTextColor: getTextColor(window.customBackground) === "#000000" ? "#666666" : "#888888"
         color: root.textColor
         font.pointSize: 11
 
-        background: Rectangle {
-            color: window.customBackground
-            border.color: window.customAccent
-            border.width: 1
-            radius: 6
+        background: ThemedRectangle {
+            borderRadius: 6
         }
     }
 
@@ -205,6 +202,19 @@ ApplicationWindow {
             radius: 4
             color: accentColor
         }
+    }
+
+    // 可复用组件：主题化Rectangle
+    component ThemedRectangle: Rectangle {
+        property color bgColor: window.customBackground
+        property color accentColor: window.customAccent
+        property int borderWidth: 1
+        property real borderRadius: 8
+
+        color: bgColor
+        border.color: accentColor
+        border.width: borderWidth
+        radius: borderRadius
     }
 
     // 隐藏原生标题栏，添加支持透明背景的标志
@@ -313,7 +323,7 @@ ApplicationWindow {
         // 读取过渡时间设置
         let transTimeValue = database.getSetting("QTtransTime", "2")
         durationComboBox.currentIndex = parseInt(transTimeValue)
-        let durationValues = [0, 500, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
+        let durationValues = [0, 500, 1000, 1500, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
         imageViewer.transitionDuration = durationValues[parseInt(transTimeValue)]
         
         // 读取窗口位置和大小
@@ -378,7 +388,7 @@ ApplicationWindow {
         database.saveSetting("CustomBackground", customBackground.toString())
         database.saveSetting("CustomAccent", customAccent.toString())
     }
-    
+
     // 边缘调整大小（8个方向）
     MouseArea { height: 8; anchors { top: parent.top; left: parent.left; right: parent.right }
         cursorShape: Qt.SizeVerCursor; z: 100
@@ -704,7 +714,7 @@ ApplicationWindow {
                 
                 // 左侧：窗口标题
                 Text {
-                    text: window.title; color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
+                    text: window.title; color: getTextColor(window.customBackground)
                     font.pointSize: 11; font.bold: true
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -714,7 +724,7 @@ ApplicationWindow {
 
                 // 第一段：分组完整路径
                 Text {
-                    text: window.groupPath; color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
+                    text: window.groupPath; color: getTextColor(window.customBackground)
                     font.pointSize: 10
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideMiddle
@@ -726,7 +736,7 @@ ApplicationWindow {
 
                 // 第二段：当前分组图片数量
                 Text {
-                    text: "图片数量: " + window.imageCount; color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
+                    text: "图片数量: " + window.imageCount; color: getTextColor(window.customBackground)
                     font.pointSize: 10
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -736,7 +746,7 @@ ApplicationWindow {
 
                 // 第三段：当前图片详细信息
                 Text {
-                    text: window.currentImageInfo; color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"
+                    text: window.currentImageInfo; color: getTextColor(window.customBackground)
                     font.pointSize: 10
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight
@@ -750,8 +760,8 @@ ApplicationWindow {
                     Rectangle {
                         id: minButton
                         width: 28; height: 28; radius: 6; color: "transparent"
-                        Text { text: "—"; color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"; font.pointSize: 12; anchors.centerIn: parent }
-                        
+                        Text { text: "—"; color: getTextColor(window.customBackground); font.pointSize: 12; anchors.centerIn: parent }
+
                         MouseArea {
                             anchors.fill: parent; hoverEnabled: true
                             onEntered: minButton.color = window.customAccent
@@ -759,12 +769,12 @@ ApplicationWindow {
                             onClicked: window.visibility = Window.Minimized
                         }
                     }
-                    
+
                     Rectangle {
                         id: maxButton
                         width: 28; height: 28; radius: 6; color: "transparent"
-                        Text { id: maxIcon; text: "□"; color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"; font.pointSize: 12; anchors.centerIn: parent }
-                        
+                        Text { id: maxIcon; text: "□"; color: getTextColor(window.customBackground); font.pointSize: 12; anchors.centerIn: parent }
+
                         MouseArea {
                             anchors.fill: parent; hoverEnabled: true
                             onEntered: maxButton.color = window.customAccent
@@ -772,12 +782,12 @@ ApplicationWindow {
                             onClicked: window.visibility = window.visibility === Window.Maximized ? Window.Windowed : Window.Maximized
                         }
                     }
-                    
+
                     Rectangle {
                         id: closeButton
                         width: 28; height: 28; radius: 6; color: "transparent"
-                        Text { text: "✕"; color: (0.299 * window.customBackground.r + 0.587 * window.customBackground.g + 0.114 * window.customBackground.b) > 0.5 ? "#000000" : "#FFFFFF"; font.pointSize: 12; font.bold: true; anchors.centerIn: parent }
-                        
+                        Text { text: "✕"; color: getTextColor(window.customBackground); font.pointSize: 12; font.bold: true; anchors.centerIn: parent }
+
                         MouseArea {
                             anchors.fill: parent; hoverEnabled: true
                             onEntered: closeButton.color = "#E81123"
@@ -887,67 +897,73 @@ ApplicationWindow {
                         }
                     }
                 }
-                
+
                 Item { Layout.fillWidth: true }
 
-                StyledComboBox {
-                    id: transitionComboBox
-                    Layout.preferredWidth: 200
-                    Layout.alignment: Qt.AlignVCenter
-                    model: ["随机",
-                           // 普通过渡效果（0-26）
-                           "淡入淡出", "向左滑动", "向右滑动", "缩放", "淡入淡出+缩放",
-                           "向左旋转90°", "向右旋转90°", "向左旋转180°", "向右旋转180°", "上滑下滑", "下滑上滑",
-                           "左下向右上", "右上向左下", "左上向右下", "右下向左上", "翻转", "反向翻转", "上下翻转", "上翻转", "缩放过渡", "对角线翻转", "反向对角线翻转", "顶端X轴翻转", "底端X轴翻转", "左侧Y轴翻转", "右侧Y轴翻转", "螺旋飞出飞入",
-                           // 着色器过渡效果（27-69）
-                           "溶解（着色器）", "马赛克（着色器）", "水波扭曲（着色器）", "从左向右擦除（着色器）", "从右向左擦除（着色器）",
-                           "从上向下擦除（着色器）", "从下向上擦除（着色器）", "X轴窗帘（着色器）", "Y轴窗帘（着色器）", "故障艺术（着色器）",
-                           "旋转效果（着色器）", "拉伸效果（着色器）", "百叶窗效果（着色器）", "扭曲呼吸（着色器）", "涟漪扩散（着色器）",
-                           "鱼眼（着色器）", "切片（着色器）", "反色（着色器）", "模糊渐变（着色器）", "破碎（着色器）",
-                           "雷达扫描（着色器）", "万花筒（着色器）", "火焰燃烧（着色器）", "水墨晕染（着色器）",
-                           "粒子爆炸（着色器）", "极光流动（着色器）", "赛博朋克故障（着色器）", "黑洞吞噬（着色器）",
-                           "全息投影（着色器）", "网格块（着色器）", "液体变形（着色器）", "像素化（着色器）",
-                           "纸张撕裂（着色器）", "磁性吸附（着色器）", "玻璃破碎（着色器）",
-                           "电影卷轴（着色器）", "DNA双螺旋（着色器）", "极坐标映射（着色器）",
-                           "幕布闭合（着色器）", "霓虹灯（着色器）", "传送门（着色器）", "粒子重组（着色器）", "黑白颜色过渡（着色器）"]
-                    currentIndex: 0
+                // 右侧控件：过渡效果、过渡时间、导入按钮
+                RowLayout {
+                    spacing: 10
 
-                    popup {
-                        height: 380
-                    }
+                    StyledComboBox {
+                        id: transitionComboBox
+                        Layout.preferredWidth: 200
+                        Layout.alignment: Qt.AlignVCenter
+                        model: ["随机",
+                               // 普通过渡效果（0-28）
+                               "淡入淡出", "向左滑动", "向右滑动", "缩放", "淡入淡出+缩放",
+                               "向左旋转90°", "向右旋转90°", "向左旋转180°", "向右旋转180°", "上滑下滑", "下滑上滑",
+                               "左下向右上", "右上向左下", "左上向右下", "右下向左上", "翻转", "反向翻转", "上下翻转", "上翻转", "缩放过渡", "对角线翻转", "反向对角线翻转", "顶端X轴翻转", "底端X轴翻转", "左侧Y轴翻转", "右侧Y轴翻转", "螺旋飞出飞入", "Y轴翻转2圈", "X轴翻转2圈",
+                               // 着色器过渡效果（29-76）
+                               "溶解（着色器）", "马赛克（着色器）", "水波扭曲（着色器）", "从左向右擦除（着色器）", "从右向左擦除（着色器）",
+                               "从上向下擦除（着色器）", "从下向上擦除（着色器）", "X轴窗帘（着色器）", "Y轴窗帘（着色器）", "故障艺术（着色器）",
+                               "旋转效果（着色器）", "拉伸效果（着色器）", "百叶窗效果（着色器）", "扭曲呼吸（着色器）", "涟漪扩散（着色器）",
+                               "鱼眼（着色器）", "切片（着色器）", "反色（着色器）", "模糊渐变（着色器）", "破碎（着色器）",
+                               "雷达扫描（着色器）", "万花筒（着色器）", "火焰燃烧（着色器）", "水墨晕染（着色器）",
+                               "粒子爆炸（着色器）", "极光流动（着色器）", "赛博朋克故障（着色器）", "黑洞吞噬（着色器）",
+                               "全息投影（着色器）", "网格块（着色器）", "液体变形（着色器）", "像素化（着色器）",
+                               "纸张撕裂（着色器）", "磁性吸附（着色器）", "玻璃破碎（着色器）",
+                               "电影卷轴（着色器）", "DNA双螺旋（着色器）", "极坐标映射（着色器）",
+                               "幕布闭合（着色器）", "霓虹灯（着色器）", "传送门（着色器）", "粒子重组（着色器）", "黑白颜色过渡（着色器）",
+                               "球体映射（着色器）", "棱镜折射（着色器）", "螺旋变形（着色器）", "马赛克旋转（着色器）", "液态融合（着色器）"]
+                        currentIndex: 0
 
-                    onCurrentIndexChanged: {
-                        if (currentIndex === 0) {
-                            // 随机模式
-                            imageViewer.transitionType = -1
-                        } else {
-                            // 所有过渡效果（包括普通和着色器）：transitionType = currentIndex - 1
-                            // 普通过渡：1-27 → 0-26
-                            // 着色器过渡：28-70 → 27-69
-                            imageViewer.transitionType = currentIndex - 1
+                        popup {
+                            height: 380
+                        }
+
+                        onCurrentIndexChanged: {
+                            if (currentIndex === 0) {
+                                // 随机模式
+                                imageViewer.transitionType = -1
+                            } else {
+                                // 所有过渡效果（包括普通和着色器）：transitionType = currentIndex - 1
+                                // 普通过渡：1-29 → 0-28（29种效果）
+                                // 着色器过渡：30-77 → 29-76（48种效果）
+                                imageViewer.transitionType = currentIndex - 1
+                            }
                         }
                     }
-                }
-                
-                StyledComboBox {
-                    id: durationComboBox
-                    Layout.preferredWidth: 120
-                    Layout.alignment: Qt.AlignVCenter
-                    model: ["无过渡", "0.5秒", "1秒", "2秒", "3秒", "4秒", "5秒", "6秒", "7秒", "8秒"]
-                    currentIndex: 2
 
-                    onCurrentIndexChanged: {
-                        var durationValues = [0, 500, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
-                        imageViewer.transitionDuration = durationValues[currentIndex]
+                    StyledComboBox {
+                        id: durationComboBox
+                        Layout.preferredWidth: 120
+                        Layout.alignment: Qt.AlignVCenter
+                        model: ["无过渡", "0.5秒", "1秒", "1.5秒", "2秒", "3秒", "4秒", "5秒", "6秒", "7秒", "8秒"]
+                        currentIndex: 2
+
+                        onCurrentIndexChanged: {
+                            var durationValues = [0, 500, 1000, 1500, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
+                            imageViewer.transitionDuration = durationValues[currentIndex]
+                        }
                     }
-                }
-                
-                ThemeColorButton {
-                    id: importButton
-                    text: qsTr("导入图片")
-                    Layout.preferredWidth: 100
-                    Layout.preferredHeight: 28
-                    onClicked: importImages()
+
+                    ThemeColorButton {
+                        id: importButton
+                        text: qsTr("导入图片")
+                        Layout.preferredWidth: 100
+                        Layout.preferredHeight: 28
+                        onClicked: importImages()
+                    }
                 }
             }
         }
@@ -1494,7 +1510,7 @@ ApplicationWindow {
             }
         }
     }
-    
+
     // 文件选择对话框
     FileDialog {
         id: fileDialog

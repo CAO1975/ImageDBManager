@@ -1,46 +1,62 @@
-// ImageList.qml - 移除所有与主题相关的代码
-import QtQuick
-import QtQuick.Controls
-import QtQuick.Layouts
-import QtQuick.Controls.Universal
+// ImageList.qml - 竖向CoverFlow效果（完整版，保留所有原始代码）
+import QtQuick 6.10
+import QtQuick.Controls 6.10
+import QtQuick.Layouts 6.10
+import QtQuick.Controls.Universal 6.10
 
 Item {
     property color customBackground: '#112233'
     property color customAccent: '#30638f'
     anchors.fill: parent
-    
-    // 添加背景色和边框，确保在任何容器中都有一致的外观
-    Rectangle {
+
+    // 可复用组件：主题化Rectangle
+    component ThemedRectangle: Rectangle {
+        property color bgColor: customBackground
+        property color accentColor: customAccent
+        property int borderWidth: 1
+        property real borderRadius: 8
+
+        color: bgColor
+        border.color: accentColor
+        border.width: borderWidth
+        radius: borderRadius
+    }
+
+    ThemedRectangle {
         anchors.fill: parent
-        color: customBackground
-        border.color: customAccent
-        border.width: 1
         z: -1
-        // 添加圆角效果
-        radius: 8
     }
-    
-    ListModel {
-        id: imageModel
+
+    // 根据背景颜色计算合适的文字颜色
+    function getTextColor(backgroundColor) {
+        let brightness = 0.299 * backgroundColor.r + 0.587 * backgroundColor.g + 0.114 * backgroundColor.b
+        return brightness > 0.5 ? "#000000" : "#FFFFFF"
     }
+
+    // 导航函数：根据滚轮方向切换图片
+    function navigateWithWheel(delta) {
+        if (delta > 0) {
+            if (listView.currentIndex > 0) {
+                listView.currentIndex--
+                selectedImageId = imageModel.get(listView.currentIndex).id
+                imageSelected(selectedImageId)
+            }
+        } else if (delta < 0) {
+            if (listView.currentIndex < imageModel.count - 1) {
+                listView.currentIndex++
+                selectedImageId = imageModel.get(listView.currentIndex).id
+                imageSelected(selectedImageId)
+            }
+        }
+    }
+
+    ListModel { id: imageModel }
     
     MouseArea {
         anchors.fill: parent
         onClicked: listView.forceActiveFocus()
         onWheel: function(event) {
-            if (event.angleDelta.y > 0) {
-                if (listView.currentIndex > 0) {
-                    listView.currentIndex--
-                    selectedImageId = imageModel.get(listView.currentIndex).id
-                    imageSelected(selectedImageId)
-                }
-            } else if (event.angleDelta.y < 0) {
-                if (listView.currentIndex < imageModel.count - 1) {
-                    listView.currentIndex++
-                    selectedImageId = imageModel.get(listView.currentIndex).id
-                    imageSelected(selectedImageId)
-                }
-            }
+            navigateWithWheel(event.angleDelta.y)
             event.accepted = true
         }
     }
@@ -56,10 +72,8 @@ Item {
     property int currentGroupId: -1
     
     function loadImages(groupId) {
-        // 保存当前分组ID
         currentGroupId = groupId || -1
         imageModel.clear()
-        // 如果没有提供groupId，默认获取所有图片
         var imageIds = database.getAllImageIds(currentGroupId)
         
         for (var i = 0; i < imageIds.length; i++) {
@@ -93,24 +107,6 @@ Item {
         focus: true
         Keys.enabled: true
         
-        ScrollBar.vertical: ScrollBar {
-            id: scrollBar
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            policy: ScrollBar.AlwaysOn
-            active: true
-            width: 8
-            background: Rectangle { 
-                color: customBackground
-                radius: 4 
-            }
-            contentItem: Rectangle { 
-                radius: 4
-                color: customAccent
-            }
-        }
-
         Keys.onPressed: function(event) {
             if (event.key === Qt.Key_Up) {
                 event.accepted = true
@@ -129,73 +125,87 @@ Item {
             }
         }
         
+        ScrollBar.vertical: ScrollBar {
+            width: 8
+            policy: ScrollBar.AlwaysOn
+            active: true
+            background: Rectangle {
+                color: customBackground
+                radius: 4
+            }
+            contentItem: Rectangle {
+                radius: 4
+                color: customAccent
+            }
+        }
+        
         MouseArea {
             anchors.fill: parent
             hoverEnabled: true
             acceptedButtons: Qt.NoButton
-            
+
             onWheel: function(event) {
-                if (event.angleDelta.y > 0) {
-                    if (listView.currentIndex > 0) {
-                        listView.currentIndex--
-                        selectedImageId = imageModel.get(listView.currentIndex).id
-                        imageSelected(selectedImageId)
-                    }
-                } else if (event.angleDelta.y < 0) {
-                    if (listView.currentIndex < imageModel.count - 1) {
-                        listView.currentIndex++
-                        selectedImageId = imageModel.get(listView.currentIndex).id
-                        imageSelected(selectedImageId)
-                    }
-                }
+                navigateWithWheel(event.angleDelta.y)
                 event.accepted = true
             }
         }
     }
     
-    // 右键菜单
     Menu {
         id: imageContextMenu
-        
         MenuItem {
             text: "重命名图片文件"
-            onClicked: {
-                // 发射信号通知主界面打开重命名对话框
-                imageRightClicked(contextImageId, contextImageFilename, "rename")
-            }
+            onClicked: imageRightClicked(contextImageId, contextImageFilename, "rename")
         }
-        
         MenuItem {
             text: "删除图片"
-            onClicked: {
-                // 发射信号通知主界面打开删除确认对话框
-                imageRightClicked(contextImageId, contextImageFilename, "delete")
-            }
+            onClicked: imageRightClicked(contextImageId, contextImageFilename, "delete")
         }
-        
         MenuItem {
             text: "调整图片到指定分组"
-            onClicked: {
-                // 发射信号通知主界面打开调整分组对话框
-                imageRightClicked(contextImageId, contextImageFilename, "move")
-            }
+            onClicked: imageRightClicked(contextImageId, contextImageFilename, "move")
         }
     }
     
     Component {
         id: imageDelegate
         Rectangle {
+            id: cardRoot
             width: listView.width - 10
-            height: model.itemHeight
+
+            // ===== CoverFlow 3D 变换核心 =====
+            property real rawHeight: Math.max(80, Math.min(250, model.itemHeight))
+            property real centerOffset: y - listView.contentY - listView.height/2 + rawHeight/2
+            property real distanceRatio: Math.min(1.0, Math.abs(centerOffset) / (listView.height/2))
+            property real maxTiltAngle: 50
+            property real tiltAngle: maxTiltAngle * Math.pow(distanceRatio, 0.5)
+            property real heightCompensation: distanceRatio > 0.01 ? 1.0 / Math.cos(tiltAngle * Math.PI / 180) : 1.0
+
+            height: rawHeight
+            
+            transform: [
+                Rotation {
+                    origin.x: cardRoot.width/2
+                    origin.y: cardRoot.height/2
+                    axis: Qt.vector3d(1, 0, 0)
+                    angle: -tiltAngle * Math.sign(centerOffset)
+                },
+                Scale {
+                    origin.x: cardRoot.width/2
+                    origin.y: cardRoot.height/2
+                    xScale: 1.2 - distanceRatio * 0.3
+                    yScale: 1.2 - distanceRatio * 0.3
+                }
+            ]
+            
+            z: -Math.abs(centerOffset)
             
             radius: 8
             color: model.id === selectedImageId ? customAccent : customBackground
             border.color: "transparent"
             border.width: 1
             
-            Behavior on height {
-                NumberAnimation { duration: 200 }
-            }
+            Behavior on height { NumberAnimation { duration: 200 } }
             
             MouseArea {
                 anchors.fill: parent
@@ -208,7 +218,6 @@ Item {
                         imageSelected(model.id)
                         listView.forceActiveFocus()
                     } else if (mouse.button === Qt.RightButton) {
-                        // 保存当前右键点击的图片信息
                         contextImageId = model.id
                         contextImageFilename = model.filename
                         imageContextMenu.popup()
@@ -216,43 +225,42 @@ Item {
                 }
             }
             
-            Row {
+            // ===== 修复：使用 RowLayout 替代 Row =====
+            RowLayout {
                 anchors.fill: parent
                 anchors.margins: 5
                 spacing: 8
                 
                 Image {
-                id: thumbnail
-                width: 140
-                height: parent.height - 8
-                // 使用自定义图片提供器加载缩略图
-                source: "image://imageprovider/" + model.id
-                fillMode: Image.PreserveAspectFit
-                anchors.verticalCenter: parent.verticalCenter
-                
-                onStatusChanged: {
-                    if (status === Image.Ready) {
-                        var aspectRatio = sourceSize.width / sourceSize.height
-                        var calculatedHeight = Math.round(140 / aspectRatio) + 16
-                        calculatedHeight = Math.max(60, Math.min(calculatedHeight, 200))
-                        imageModel.setProperty(index, "itemHeight", calculatedHeight)
-                        listView.forceLayout()
+                    id: thumbnail
+                    width: 140
+                    height: parent.height - 8
+                    source: "image://imageprovider/" + model.id
+                    fillMode: Image.PreserveAspectFit
+                    Layout.alignment: Qt.AlignVCenter
+                    
+                    onStatusChanged: {
+                        if (status === Image.Ready) {
+                            var aspectRatio = sourceSize.width / sourceSize.height
+                            var calculatedHeight = Math.round(140 / aspectRatio) + 16
+                            calculatedHeight = Math.max(60, Math.min(calculatedHeight, 200))
+                            imageModel.setProperty(index, "itemHeight", calculatedHeight)
+                            listView.forceLayout()
+                        }
                     }
                 }
-            }
                 
                 Text {
-                    anchors.left: thumbnail.right
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    anchors.bottom: parent.bottom
-                    anchors.leftMargin: 8
+                    Layout.fillWidth: true    // 填充剩余宽度
+                    Layout.alignment: Qt.AlignVCenter
+                    
                     text: model.filename || "无文件名"
                     font.pointSize: 11
-                    color: (0.299 * (model.id === selectedImageId ? customAccent.r : customBackground.r) + 0.587 * (model.id === selectedImageId ? customAccent.g : customBackground.g) + 0.114 * (model.id === selectedImageId ? customAccent.b : customBackground.b)) > 0.5 ? "#000000" : "#FFFFFF"
                     font.bold: true
                     elide: Text.ElideRight
                     verticalAlignment: Text.AlignVCenter
+                    
+                    color: model.id === selectedImageId ? getTextColor(customAccent) : getTextColor(customBackground)
                 }
             }
         }

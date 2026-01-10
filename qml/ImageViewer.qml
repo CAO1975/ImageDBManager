@@ -8,16 +8,52 @@ Item {
     property color customBackground: '#112233'
     property color customAccent: '#30638f'
     anchors.fill: parent
-    
-    // 添加背景色和边框，确保在任何容器中都有一致的外观
-    Rectangle {
+
+    // 可复用组件：主题化Rectangle
+    component ThemedRectangle: Rectangle {
+        property color bgColor: customBackground
+        property color accentColor: customAccent
+        property int borderWidth: 1
+        property real borderRadius: 8
+
+        color: bgColor
+        border.color: accentColor
+        border.width: borderWidth
+        radius: borderRadius
+    }
+
+    // 辅助函数：设置旋转轴
+    function setRotationAxis(rotationObj, x, y, z) {
+        rotationObj.axis.x = x
+        rotationObj.axis.y = y
+        rotationObj.axis.z = z
+    }
+
+    // 辅助函数：重置所有旋转轴到默认值
+    function resetRotationAxes() {
+        currentRotation.axis.x = 0
+        currentRotation.axis.y = 1
+        currentRotation.axis.z = 0
+        nextRotation.axis.x = 0
+        nextRotation.axis.y = 1
+        nextRotation.axis.z = 0
+        currentRotationX.axis.x = 1
+        currentRotationX.axis.y = 0
+        currentRotationX.axis.z = 0
+        nextRotationX.axis.x = 1
+        nextRotationX.axis.y = 0
+        nextRotationX.axis.z = 0
+    }
+
+
+
+    // 动画通用属性
+    readonly property int animDuration: transitionDuration / 2
+    readonly property var animEasing: Easing.InOutQuad
+
+    ThemedRectangle {
         anchors.fill: parent
-        color: customBackground
-        border.color: customAccent
-        border.width: 1
         z: -1
-        // 添加圆角效果
-        radius: 8
     }
     
     property int currentImageId: -1
@@ -117,10 +153,10 @@ Item {
             
             var selectedTransition = transitionType
             if (selectedTransition === -1) {
-                // 随机选择过渡效果，范围0-69（70种效果）
-                // 0-26: 27种普通过渡效果
-                // 27-69: 43种着色器过渡效果
-                selectedTransition = Math.floor(Math.random() * 70);
+                // 随机选择过渡效果，范围0-76（77种效果）
+                // 0-28: 29种普通过渡效果
+                // 29-76: 48种着色器过渡效果
+                selectedTransition = Math.floor(Math.random() * 77);
             }
 
             resetTransform()
@@ -131,23 +167,23 @@ Item {
             nextImageItem.scale = 1.0; nextImageItem.rotation = 0
 
             // 对于着色器过渡效果，需要确保两张图片都可见
-            if (selectedTransition >= 27 && selectedTransition <= 69) {
-                // 着色器过渡：27-69（43种效果）
+            if (selectedTransition >= 29 && selectedTransition <= 76) {
+                // 着色器过渡：29-76（48种效果）
                 nextImageItem.opacity = 1.0;
                 currentImageItem.visible = true;
                 nextImageItem.visible = true;
             } else {
-                // 普通过渡：0-26
+                // 普通过渡：0-28
                 nextImageItem.opacity = 0.0;
                 nextImageItem.visible = true;  // 确保图片项可见，即使透明度为0
             }
 
             currentImageItem.source = currentImage || ""; nextImageItem.source = nextImage || ""
 
-            // 如果是27-69，则使用着色器过渡
-            if (selectedTransition >= 27 && selectedTransition <= 69) {
-                // 设置着色器过渡效果类型：0-42
-                var shaderEffectIndex = selectedTransition - 27;  // 映射到着色器效果索引0-42
+            // 如果是29-76，则使用着色器过渡
+            if (selectedTransition >= 29 && selectedTransition <= 76) {
+                // 设置着色器过渡效果类型：0-47
+                var shaderEffectIndex = selectedTransition - 29;  // 映射到着色器效果索引0-47
                 shaderEffectType = shaderEffectIndex;
                 console.log("Starting shader transition: selectedTransition=", selectedTransition, "shaderEffectIndex=", shaderEffectIndex, "effectType=", shaderEffectType, "transitionProgress=", shaderEffectItem.transitionProgress)
                 // 显示着色器过渡组件，将普通图片项隐藏（但保持ShaderEffectSource可见）
@@ -196,6 +232,8 @@ Item {
                     case 24: flipYLeftAnimation.start(); break
                     case 25: flipYRightAnimation.start(); break
                     case 26: spiralFlyAnimation.start(); break
+                    case 27: flipScaleAnimation.start(); break
+                    case 28: flipScaleXAnimation.start(); break
                     default: fadeAnimation.start(); break
                 }
             }
@@ -246,7 +284,7 @@ Item {
         id: imageContainer
         anchors.fill: parent
         clip: true
-        
+
         Image {
             id: currentImageItem
             width: parent.width
@@ -257,19 +295,26 @@ Item {
             x: imageOffset.x; y: imageOffset.y; scale: scaleFactor
             transformOrigin: Item.Center
             z: -1  // 降低z值，确保着色器在上面
-            
+
             // 旋转变换 - 同时支持Y轴和X轴翻转
             transform: [
                 Rotation {
                     id: currentRotation
                     origin.x: currentImageItem.width / 2
                     origin.y: currentImageItem.height / 2
-                    axis { x: 0; y: 1; z: 0 }  // 默认绕Y轴旋转
+                    axis { x: 0; y: 1; z: 0 }
+                    angle: 0
+                },
+                Rotation {
+                    id: currentRotationX
+                    origin.x: currentImageItem.width / 2
+                    origin.y: currentImageItem.height / 2
+                    axis { x: 1; y: 0; z: 0 }
                     angle: 0
                 }
             ]
         }
-        
+
         Image {
             id: nextImageItem
             width: parent.width
@@ -280,14 +325,21 @@ Item {
             x: imageOffset.x; y: imageOffset.y; scale: scaleFactor
             transformOrigin: Item.Center
             z: -1  // 降低z值，确保着色器在上面
-            
+
             // 旋转变换 - 同时支持Y轴和X轴翻转
             transform: [
                 Rotation {
                     id: nextRotation
                     origin.x: nextImageItem.width / 2
                     origin.y: nextImageItem.height / 2
-                    axis { x: 0; y: 1; z: 0 }  // 默认绕Y轴旋转
+                    axis { x: 0; y: 1; z: 0 }
+                    angle: 0
+                },
+                Rotation {
+                    id: nextRotationX
+                    origin.x: nextImageItem.width / 2
+                    origin.y: nextImageItem.height / 2
+                    axis { x: 1; y: 0; z: 0 }
                     angle: 0
                 }
             ]
@@ -314,29 +366,31 @@ Item {
                 id: shaderEffectItem
                 anchors.fill: parent
                 z: 0  // 着色器在边框之下
-            
-            // ShaderEffectSource 用于捕获当前图片和下一张图片
-            property variant currentSource: ShaderEffectSource {
-                id: currentSource
-                sourceItem: currentImageItem
-                hideSource: false  // 设置为false，避免隐藏源图像
-                live: true
-                sourceRect: Qt.rect(0, 0, imageContainer.width, imageContainer.height)
-            }
-            
-            property variant nextSource: ShaderEffectSource {
-                id: nextSource
-                sourceItem: nextImageItem
-                hideSource: false  // 设置为false，避免隐藏源图像
-                live: true
-                sourceRect: Qt.rect(0, 0, imageContainer.width, imageContainer.height)
-            }
-            
-            // 过渡参数
-            property real transitionProgress: 0
-            
+
                 // 指定着色器文件路径
+                // 顶点着色器和片段着色器已编译到一个.qsb文件中
+                // Qt会自动从同一个.qsb文件中读取顶点着色器
                 fragmentShader: "qrc:/assets/shaders/qsb/transitions.frag.qsb"
+
+                // ShaderEffectSource 用于捕获当前图片和下一张图片
+                property variant currentSource: ShaderEffectSource {
+                    id: currentSource
+                    sourceItem: currentImageItem
+                    hideSource: false  // 设置为false，避免隐藏源图像
+                    live: true
+                    sourceRect: Qt.rect(0, 0, imageContainer.width, imageContainer.height)
+                }
+
+                property variant nextSource: ShaderEffectSource {
+                    id: nextSource
+                    sourceItem: nextImageItem
+                    hideSource: false  // 设置为false，避免隐藏源图像
+                    live: true
+                    sourceRect: Qt.rect(0, 0, imageContainer.width, imageContainer.height)
+                }
+
+                // 过渡参数
+                property real transitionProgress: 0
 
                 // 添加调试信息
                 Component.onCompleted: {
@@ -424,160 +478,160 @@ Item {
     // 动画定义
     ParallelAnimation {
         id: fadeAnimation
-        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
+        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: animEasing }
         onRunningChanged: { if (!running && transitioning) endTransition() }
     }
-    
+
     ParallelAnimation {
         id: rotateRightAnimation
-        NumberAnimation { target: currentImageItem; property: "rotation"; from: 0; to: 90; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "rotation"; from: -90; to: 0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
+        NumberAnimation { target: currentImageItem; property: "rotation"; from: 0; to: 90; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "rotation"; from: -90; to: 0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: animEasing }
         onRunningChanged: { if (!running && transitioning) endTransition() }
     }
-    
+
     ParallelAnimation {
         id: rotateLeft180Animation
-        NumberAnimation { target: currentImageItem; property: "rotation"; from: 0; to: -180; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "rotation"; from: 180; to: 0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
+        NumberAnimation { target: currentImageItem; property: "rotation"; from: 0; to: -180; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "rotation"; from: 180; to: 0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: animEasing }
         onRunningChanged: { if (!running && transitioning) endTransition() }
     }
-    
+
     ParallelAnimation {
         id: rotateRight180Animation
-        NumberAnimation { target: currentImageItem; property: "rotation"; from: 0; to: 180; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "rotation"; from: -180; to: 0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
+        NumberAnimation { target: currentImageItem; property: "rotation"; from: 0; to: 180; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "rotation"; from: -180; to: 0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: animEasing }
         onRunningChanged: { if (!running && transitioning) endTransition() }
     }
-    
+
     ParallelAnimation {
         id: rotateAnimation
-        NumberAnimation { target: currentImageItem; property: "rotation"; from: 0; to: -90; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "rotation"; from: 90; to: 0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
+        NumberAnimation { target: currentImageItem; property: "rotation"; from: 0; to: -90; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "rotation"; from: 90; to: 0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: animEasing }
         onRunningChanged: { if (!running && transitioning) endTransition() }
     }
-    
+
     ParallelAnimation {
         id: slideLeftAnimation
-        NumberAnimation { target: currentImageItem; property: "x"; from: 0; to: -500; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "x"; from: 500; to: 0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
+        NumberAnimation { target: currentImageItem; property: "x"; from: 0; to: -500; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "x"; from: 500; to: 0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: animEasing }
         onRunningChanged: { if (!running && transitioning) endTransition() }
     }
-    
+
     ParallelAnimation {
         id: slideRightAnimation
-        NumberAnimation { target: currentImageItem; property: "x"; from: 0; to: 500; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "x"; from: -500; to: 0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
+        NumberAnimation { target: currentImageItem; property: "x"; from: 0; to: 500; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "x"; from: -500; to: 0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: animEasing }
         onRunningChanged: { if (!running && transitioning) endTransition() }
     }
-    
+
     ParallelAnimation {
         id: scaleAnimation
-        NumberAnimation { target: currentImageItem; property: "scale"; from: 1.0; to: 0.3; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "scale"; from: 2.0; to: 1.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
+        NumberAnimation { target: currentImageItem; property: "scale"; from: 1.0; to: 0.3; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "scale"; from: 2.0; to: 1.0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: animEasing }
         onRunningChanged: { if (!running && transitioning) endTransition() }
     }
-    
+
     ParallelAnimation {
         id: fadeScaleAnimation
-        NumberAnimation { target: currentImageItem; property: "scale"; from: 1.0; to: 0.9; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "scale"; from: 1.1; to: 1.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
+        NumberAnimation { target: currentImageItem; property: "scale"; from: 1.0; to: 0.9; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "scale"; from: 1.1; to: 1.0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: animEasing }
         onRunningChanged: { if (!running && transitioning) endTransition() }
     }
-    
+
     // 上滑淡出，下滑入淡入效果
     ParallelAnimation {
         id: slideUpDownAnimation
-        NumberAnimation { target: currentImageItem; property: "y"; from: 0; to: -500; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "y"; from: 500; to: 0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
+        NumberAnimation { target: currentImageItem; property: "y"; from: 0; to: -500; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "y"; from: 500; to: 0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: animEasing }
         onRunningChanged: { if (!running && transitioning) endTransition() }
     }
-    
+
     // 下滑淡出，上滑入淡入效果
     ParallelAnimation {
         id: slideDownUpAnimation
-        NumberAnimation { target: currentImageItem; property: "y"; from: 0; to: 500; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "y"; from: -500; to: 0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
+        NumberAnimation { target: currentImageItem; property: "y"; from: 0; to: 500; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "y"; from: -500; to: 0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: animEasing }
         onRunningChanged: { if (!running && transitioning) endTransition() }
     }
-    
+
     // 左下向右上滑入效果 - 旧图右上滑出，新图右下向左上滑入（缩放+滑动）
     ParallelAnimation {
         id: slideLeftDownToRightUpAnimation
         NumberAnimation { target: nextImageItem; property: "z"; from: 0; to: 2; duration: 1 }
-        NumberAnimation { target: currentImageItem; property: "x"; from: 0; to: 500; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: currentImageItem; property: "y"; from: 0; to: -500; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: currentImageItem; property: "scale"; from: 1.0; to: 0.3; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "x"; from: 500; to: 0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "y"; from: 500; to: 0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "scale"; from: 0.3; to: 1.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
+        NumberAnimation { target: currentImageItem; property: "x"; from: 0; to: 500; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: currentImageItem; property: "y"; from: 0; to: -500; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: currentImageItem; property: "scale"; from: 1.0; to: 0.3; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "x"; from: 500; to: 0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "y"; from: 500; to: 0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "scale"; from: 0.3; to: 1.0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: animEasing }
         onRunningChanged: { if (!running && transitioning) endTransition() }
     }
-    
+
     // 右上向左下滑入效果 - 旧图左下滑出，新图左上向右下滑入（缩放+滑动）
     ParallelAnimation {
         id: slideRightUpToLeftDownAnimation
         NumberAnimation { target: nextImageItem; property: "z"; from: 0; to: 2; duration: 1 }
-        NumberAnimation { target: currentImageItem; property: "x"; from: 0; to: -500; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: currentImageItem; property: "y"; from: 0; to: 500; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: currentImageItem; property: "scale"; from: 1.0; to: 0.3; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "x"; from: -500; to: 0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "y"; from: -500; to: 0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "scale"; from: 0.3; to: 1.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
+        NumberAnimation { target: currentImageItem; property: "x"; from: 0; to: -500; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: currentImageItem; property: "y"; from: 0; to: 500; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: currentImageItem; property: "scale"; from: 1.0; to: 0.3; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "x"; from: -500; to: 0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "y"; from: -500; to: 0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "scale"; from: 0.3; to: 1.0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: animEasing }
         onRunningChanged: { if (!running && transitioning) endTransition() }
     }
-    
+
     // 左上向右下滑入效果 - 旧图右下滑出，新图左上向右下滑入（缩放+滑动）
     ParallelAnimation {
         id: slideLeftUpToRightDownAnimation
         NumberAnimation { target: nextImageItem; property: "z"; from: 0; to: 2; duration: 1 }
-        NumberAnimation { target: currentImageItem; property: "x"; from: 0; to: 500; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: currentImageItem; property: "y"; from: 0; to: 500; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: currentImageItem; property: "scale"; from: 1.0; to: 0.3; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "x"; from: -500; to: 0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "y"; from: -500; to: 0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "scale"; from: 0.3; to: 1.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
+        NumberAnimation { target: currentImageItem; property: "x"; from: 0; to: 500; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: currentImageItem; property: "y"; from: 0; to: 500; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: currentImageItem; property: "scale"; from: 1.0; to: 0.3; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "x"; from: -500; to: 0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "y"; from: -500; to: 0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "scale"; from: 0.3; to: 1.0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: animEasing }
         onRunningChanged: { if (!running && transitioning) endTransition() }
     }
-    
+
     // 右下向左上滑入效果 - 旧图左上滑出，新图右下向左上滑入（缩放+滑动）
     ParallelAnimation {
         id: slideRightDownToLeftUpAnimation
         NumberAnimation { target: nextImageItem; property: "z"; from: 0; to: 2; duration: 1 }
-        NumberAnimation { target: currentImageItem; property: "x"; from: 0; to: -500; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: currentImageItem; property: "y"; from: 0; to: -500; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: currentImageItem; property: "scale"; from: 1.0; to: 0.3; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "x"; from: 500; to: 0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "y"; from: 500; to: 0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "scale"; from: 0.3; to: 1.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
-        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: Easing.InOutQuad }
+        NumberAnimation { target: currentImageItem; property: "x"; from: 0; to: -500; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: currentImageItem; property: "y"; from: 0; to: -500; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: currentImageItem; property: "scale"; from: 1.0; to: 0.3; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "x"; from: 500; to: 0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "y"; from: 500; to: 0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "scale"; from: 0.3; to: 1.0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: animEasing }
         onRunningChanged: { if (!running && transitioning) endTransition() }
     }
     
@@ -704,10 +758,7 @@ Item {
             }
             ScriptAction {
                 script: {
-                    // 设置绕X轴旋转
-                    currentRotation.axis.x = 1;
-                    currentRotation.axis.y = 0;
-                    currentRotation.axis.z = 0;
+                    setRotationAxis(currentRotation, 1, 0, 0)
                 }
             }
             NumberAnimation {
@@ -732,10 +783,7 @@ Item {
         ParallelAnimation {
             ScriptAction {
                 script: {
-                    // 设置绕X轴旋转
-                    nextRotation.axis.x = 1;
-                    nextRotation.axis.y = 0;
-                    nextRotation.axis.z = 0;
+                    setRotationAxis(nextRotation, 1, 0, 0)
                 }
             }
             NumberAnimation {
@@ -758,12 +806,8 @@ Item {
         
         onRunningChanged: {
             if (!running && transitioning) {
-                // 恢复默认绕Y轴旋转
-                currentRotation.axis.x = 0;
-                currentRotation.axis.y = 1;
-                nextRotation.axis.x = 0;
-                nextRotation.axis.y = 1;
-                endTransition();
+                resetRotationAxes()
+                endTransition()
             }
         }
     }
@@ -783,10 +827,7 @@ Item {
             }
             ScriptAction {
                 script: {
-                    // 设置绕X轴旋转
-                    currentRotation.axis.x = 1;
-                    currentRotation.axis.y = 0;
-                    currentRotation.axis.z = 0;
+                    setRotationAxis(currentRotation, 1, 0, 0)
                 }
             }
             NumberAnimation {
@@ -811,10 +852,7 @@ Item {
         ParallelAnimation {
             ScriptAction {
                 script: {
-                    // 设置绕X轴旋转
-                    nextRotation.axis.x = 1;
-                    nextRotation.axis.y = 0;
-                    nextRotation.axis.z = 0;
+                    setRotationAxis(nextRotation, 1, 0, 0)
                 }
             }
             NumberAnimation {
@@ -837,12 +875,8 @@ Item {
         
         onRunningChanged: {
             if (!running && transitioning) {
-                // 恢复默认绕Y轴旋转
-                currentRotation.axis.x = 0;
-                currentRotation.axis.y = 1;
-                nextRotation.axis.x = 0;
-                nextRotation.axis.y = 1;
-                endTransition();
+                resetRotationAxes()
+                endTransition()
             }
         }
     }
@@ -907,10 +941,7 @@ Item {
             }
             ScriptAction {
                 script: {
-                    // 设置沿左上右下对角线旋转
-                    currentRotation.axis.x = 1;
-                    currentRotation.axis.y = 1;
-                    currentRotation.axis.z = 0;
+                    setRotationAxis(currentRotation, 1, 1, 0)
                 }
             }
             NumberAnimation {
@@ -935,10 +966,7 @@ Item {
         ParallelAnimation {
             ScriptAction {
                 script: {
-                    // 设置沿左上右下对角线旋转
-                    nextRotation.axis.x = 1;
-                    nextRotation.axis.y = 1;
-                    nextRotation.axis.z = 0;
+                    setRotationAxis(nextRotation, 1, 1, 0)
                 }
             }
             NumberAnimation {
@@ -961,12 +989,8 @@ Item {
         
         onRunningChanged: {
             if (!running && transitioning) {
-                // 恢复默认绕Y轴旋转
-                currentRotation.axis.x = 0;
-                currentRotation.axis.y = 1;
-                nextRotation.axis.x = 0;
-                nextRotation.axis.y = 1;
-                endTransition();
+                resetRotationAxes()
+                endTransition()
             }
         }
     }
@@ -986,10 +1010,7 @@ Item {
             }
             ScriptAction {
                 script: {
-                    // 设置沿右上左下对角线旋转
-                    currentRotation.axis.x = 1;
-                    currentRotation.axis.y = -1;
-                    currentRotation.axis.z = 0;
+                    setRotationAxis(currentRotation, 1, -1, 0)
                 }
             }
             NumberAnimation {
@@ -1014,10 +1035,7 @@ Item {
         ParallelAnimation {
             ScriptAction {
                 script: {
-                    // 设置沿右上左下对角线旋转
-                    nextRotation.axis.x = 1;
-                    nextRotation.axis.y = -1;
-                    nextRotation.axis.z = 0;
+                    setRotationAxis(nextRotation, 1, -1, 0)
                 }
             }
             NumberAnimation {
@@ -1040,12 +1058,8 @@ Item {
         
         onRunningChanged: {
             if (!running && transitioning) {
-                // 恢复默认绕Y轴旋转
-                currentRotation.axis.x = 0;
-                currentRotation.axis.y = 1;
-                nextRotation.axis.x = 0;
-                nextRotation.axis.y = 1;
-                endTransition();
+                resetRotationAxes()
+                endTransition()
             }
         }
     }
@@ -1124,13 +1138,11 @@ Item {
         onRunningChanged: {
             if (!running && transitioning) {
                 // 恢复默认设置
-                currentRotation.axis.x = 0;
-                currentRotation.axis.y = 1;
-                currentRotation.origin.y = currentImageItem.height / 2;
-                nextRotation.axis.x = 0;
-                nextRotation.axis.y = 1;
-                nextRotation.origin.y = nextImageItem.height / 2;
-                endTransition();
+                setRotationAxis(currentRotation, 0, 1, 0)
+                currentRotation.origin.y = currentImageItem.height / 2
+                setRotationAxis(nextRotation, 0, 1, 0)
+                nextRotation.origin.y = nextImageItem.height / 2
+                endTransition()
             }
         }
     }
@@ -1150,12 +1162,8 @@ Item {
             }
             ScriptAction {
                 script: {
-                    // 设置以图片底端为轴X轴旋转
-                    currentRotation.axis.x = 1;
-                    currentRotation.axis.y = 0;
-                    currentRotation.axis.z = 0;
-                    // 设置旋转原点为图片底端
-                    currentRotation.origin.y = currentImageItem.height;
+                    setRotationAxis(currentRotation, 1, 0, 0)
+                    currentRotation.origin.y = currentImageItem.height
                 }
             }
             NumberAnimation {
@@ -1209,13 +1217,11 @@ Item {
         onRunningChanged: {
             if (!running && transitioning) {
                 // 恢复默认设置
-                currentRotation.axis.x = 0;
-                currentRotation.axis.y = 1;
-                currentRotation.origin.y = currentImageItem.height / 2;
-                nextRotation.axis.x = 0;
-                nextRotation.axis.y = 1;
-                nextRotation.origin.y = nextImageItem.height / 2;
-                endTransition();
+                setRotationAxis(currentRotation, 0, 1, 0)
+                currentRotation.origin.y = currentImageItem.height / 2
+                setRotationAxis(nextRotation, 0, 1, 0)
+                nextRotation.origin.y = nextImageItem.height / 2
+                endTransition()
             }
         }
     }
@@ -1235,12 +1241,8 @@ Item {
             }
             ScriptAction {
                 script: {
-                    // 设置以图片左侧为轴Y轴旋转
-                    currentRotation.axis.x = 0;
-                    currentRotation.axis.y = 1;
-                    currentRotation.axis.z = 0;
-                    // 设置旋转原点为图片左侧
-                    currentRotation.origin.x = 0;
+                    setRotationAxis(currentRotation, 0, 1, 0)
+                    currentRotation.origin.x = 0
                 }
             }
             NumberAnimation {
@@ -1316,12 +1318,8 @@ Item {
             }
             ScriptAction {
                 script: {
-                    // 设置以图片右侧为轴Y轴旋转
-                    currentRotation.axis.x = 0;
-                    currentRotation.axis.y = 1;
-                    currentRotation.axis.z = 0;
-                    // 设置旋转原点为图片右侧
-                    currentRotation.origin.x = currentImageItem.width;
+                    setRotationAxis(currentRotation, 0, 1, 0)
+                    currentRotation.origin.x = currentImageItem.width
                 }
             }
             NumberAnimation {
@@ -1346,12 +1344,8 @@ Item {
         ParallelAnimation {
             ScriptAction {
                 script: {
-                    // 设置以图片右侧为轴Y轴旋转
-                    nextRotation.axis.x = 0;
-                    nextRotation.axis.y = 1;
-                    nextRotation.axis.z = 0;
-                    // 设置旋转原点为图片右侧
-                    nextRotation.origin.x = nextImageItem.width;
+                    setRotationAxis(nextRotation, 0, 1, 0)
+                    nextRotation.origin.x = nextImageItem.width
                 }
             }
             NumberAnimation {
@@ -1568,18 +1562,190 @@ Item {
             // 直接更新着色器的progress属性
             // 注意：现在需要访问内部的ShaderEffect对象
             shaderEffectItem.transitionProgress = easeT
-            
+
             console.log("Progress updated:", easeT.toFixed(2))
-            
+
             if (t >= 1.0) {
                 updateTimer.stop()
                 endTransition()
             }
         }
-        
+
         onRunningChanged: {
             if (running) {
                 startTime = Date.now()
+            }
+        }
+    }
+
+    // Y轴翻转2圈动画效果 - 旧图Y轴翻转2圈+变小消失，新图从中心点变大+Y轴翻转2圈复原
+    SequentialAnimation {
+        id: flipScaleAnimation
+
+        // 第一阶段：旧图片翻转+变小→中心点消失
+        ParallelAnimation {
+            // 确保新图片在旧图片上面
+            NumberAnimation {
+                target: nextImageItem
+                property: "z"
+                from: 0
+                to: 2
+                duration: 1
+            }
+
+            // 翻转：Y轴旋转360度（easeOut让翻转更自然）
+            NumberAnimation {
+                target: currentRotation
+                property: "angle"
+                from: 0
+                to: -360
+                duration: transitionDuration / 2
+                easing.type: Easing.OutCubic
+            }
+
+            // 变小：scale从1降到0（easeOut让变小过程更平滑）
+            NumberAnimation {
+                target: currentImageItem
+                property: "scale"
+                from: 1.0
+                to: 0.0
+                duration: transitionDuration / 2
+                easing.type: Easing.OutCubic
+            }
+
+            // 透明度：逐渐消失
+            NumberAnimation {
+                target: currentImageItem
+                property: "opacity"
+                from: 1.0
+                to: 0.0
+                duration: transitionDuration / 2
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        // 第二阶段：新图片从中心点→翻转+变大→复原
+        ParallelAnimation {
+            // 翻转：从360度翻转到0度（easeIn让翻转更自然）
+            NumberAnimation {
+                target: nextRotation
+                property: "angle"
+                from: 360
+                to: 0
+                duration: transitionDuration / 2
+                easing.type: Easing.InCubic
+            }
+
+            // 变大：scale从0增大到1（easeIn让变大过程更自然）
+            NumberAnimation {
+                target: nextImageItem
+                property: "scale"
+                from: 0.0
+                to: 1.0
+                duration: transitionDuration / 2
+                easing.type: Easing.InCubic
+            }
+
+            // 透明度：逐渐显现
+            NumberAnimation {
+                target: nextImageItem
+                property: "opacity"
+                from: 0.0
+                to: 1.0
+                duration: transitionDuration / 2
+                easing.type: Easing.InCubic
+            }
+        }
+
+        onRunningChanged: {
+            if (!running && transitioning) {
+                endTransition()
+            }
+        }
+    }
+
+    // X轴翻转2圈动画效果 - 旧图X轴翻转2圈+变小消失，新图从中心点变大+X轴翻转2圈复原
+    SequentialAnimation {
+        id: flipScaleXAnimation
+
+        // 第一阶段：旧图片X轴翻转2圈+变小→中心点消失
+        ParallelAnimation {
+            // 确保新图片在旧图片上面
+            NumberAnimation {
+                target: nextImageItem
+                property: "z"
+                from: 0
+                to: 2
+                duration: 1
+            }
+
+            // X轴翻转：X轴旋转360度（easeOut让翻转更自然）
+            NumberAnimation {
+                target: currentRotationX
+                property: "angle"
+                from: 0
+                to: -360
+                duration: transitionDuration / 2
+                easing.type: Easing.OutCubic
+            }
+
+            // 变小：scale从1降到0（easeOut让变小过程更平滑）
+            NumberAnimation {
+                target: currentImageItem
+                property: "scale"
+                from: 1.0
+                to: 0.0
+                duration: transitionDuration / 2
+                easing.type: Easing.OutCubic
+            }
+
+            // 透明度：逐渐消失
+            NumberAnimation {
+                target: currentImageItem
+                property: "opacity"
+                from: 1.0
+                to: 0.0
+                duration: transitionDuration / 2
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        // 第二阶段：新图片从中心点→X轴翻转2圈+变大→复原
+        ParallelAnimation {
+            // X轴翻转：从360度翻转到0度（easeIn让翻转更自然）
+            NumberAnimation {
+                target: nextRotationX
+                property: "angle"
+                from: 360
+                to: 0
+                duration: transitionDuration / 2
+                easing.type: Easing.InCubic
+            }
+
+            // 变大：scale从0增大到1（easeIn让变大过程更自然）
+            NumberAnimation {
+                target: nextImageItem
+                property: "scale"
+                from: 0.0
+                to: 1.0
+                duration: transitionDuration / 2
+                easing.type: Easing.InCubic
+            }
+
+            // 透明度：逐渐显现
+            NumberAnimation {
+                target: nextImageItem
+                property: "opacity"
+                from: 0.0
+                to: 1.0
+                duration: transitionDuration / 2
+                easing.type: Easing.InCubic
+            }
+        }
+
+        onRunningChanged: {
+            if (!running && transitioning) {
+                endTransition()
             }
         }
     }

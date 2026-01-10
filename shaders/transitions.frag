@@ -2,6 +2,8 @@
 
 // 输入 & 输出
 layout(location = 0) in vec2 qt_TexCoord0;
+layout(location = 1) in float v_facing; // 0: 正面（旧图）, 1: 背面（新图）
+layout(location = 2) in float v_progress;
 layout(location = 0) out vec4 fragColor;
 
 // Qt ShaderEffect 自动提供的 uniform
@@ -9,7 +11,7 @@ layout(std140, binding = 0) uniform buf {
     mat4 qt_Matrix;
     float qt_Opacity;
     float progress;
-    int effectType;  // 效果类型: 0=溶解, 1=马赛克, 2=水波扭曲, 3=从左向右擦除, 4=从右向左擦除, 5=从上向下擦除, 6=从下向上擦除, 7=X轴窗帘, 8=Y轴窗帘, 9=故障, 10=旋转, 11=拉伸, 12=百叶窗, 13=扭曲呼吸, 14=涟漪扩散, 15=鱼眼, 16=切片, 17=反色, 18=模糊渐变, 19=破碎, 20=雷达扫描, 21=万花筒, 22=火焰燃烧, 23=水墨晕染, 24=粒子爆炸, 25=极光流动, 26=赛博朋克故障, 27=黑洞吞噬, 28=全息投影, 29=网格块, 30=液体变形, 31=像素化, 32=纸张撕裂, 33=磁性吸附, 34=玻璃破碎, 35=电影卷轴, 36=DNA双螺旋, 37=极坐标映射, 38=幕布闭合, 39=霓虹灯, 40=传送门, 41=粒子重组, 42=黑白颜色过渡
+    int effectType;  // 效果类型: 0=溶解, 1=马赛克, 2=水波扭曲, 3=从左向右擦除, 4=从右向左擦除, 5=从上向下擦除, 6=从下向上擦除, 7=X轴窗帘, 8=Y轴窗帘, 9=故障, 10=旋转, 11=拉伸, 12=百叶窗, 13=扭曲呼吸, 14=涟漪扩散, 15=鱼眼, 16=切片, 17=反色, 18=模糊渐变, 19=破碎, 20=雷达扫描, 21=万花筒, 22=火焰燃烧, 23=水墨晕染, 24=粒子爆炸, 25=极光流动, 26=赛博朋克故障, 27=黑洞吞噬, 28=全息投影, 29=网格块, 30=液体变形, 31=像素化, 32=纸张撕裂, 33=磁性吸附, 34=玻璃破碎, 35=电影卷轴, 36=DNA双螺旋, 37=极坐标映射, 38=幕布闭合, 39=霓虹灯, 40=传送门, 41=粒子重组, 42=黑白颜色过渡, 43=球体映射, 44=棱镜折射, 45=螺旋变形, 46=马赛克旋转, 47=液态融合
     vec3 backgroundColor;  // 背景色 (RGB)
 };
 
@@ -1657,6 +1659,366 @@ void main() {
                 colorTo.rgb = newColor;
             }
 
+            break;
+        }
+
+        case 43: // 球体映射效果
+        {
+            // 将图片映射到3D球体上旋转切换
+            vec2 center = vec2(0.5, 0.5);
+            vec2 delta = uv - center;
+
+            // 计算到中心的距离
+            float dist = length(delta);
+
+            // 球体半径
+            float radius = 0.4;
+
+            // 旋转角度：整个过渡过程旋转360度
+            float totalRotation = progress * 6.28318;
+
+            // 3D球体映射算法
+            // 将2D UV坐标映射到球体表面，再投影回2D
+
+            // 计算球体坐标（3D到2D的投影）
+            // 使用球面投影：x = r * sin(theta) * cos(phi), y = r * sin(theta) * sin(phi)
+            // 其中 theta 是极角，phi 是方位角
+
+            float maxDist = 0.35;  // 球体最大半径
+            float sphereMask = smoothstep(maxDist, maxDist * 0.8, dist);  // 球体内部mask
+            sphereMask = clamp(sphereMask, 0.0, 1.0);
+
+            // 计算球体表面的点
+            // 对于球体内的像素，计算其在球体表面的投影
+            vec2 sphereUV;
+            if (dist < maxDist * 1.1) {
+                // 球体区域：使用球体投影
+                float normalizedDist = dist / maxDist;
+                // 使用抛物线计算球体表面高度
+                float sphereHeight = sqrt(1.0 - normalizedDist * normalizedDist);
+
+                // 计算球体表面的2D投影坐标
+                // 球体边缘向中心收缩
+                float projectedDist = dist * sphereHeight * 1.2;
+
+                // 计算角度
+                float angle = atan(delta.y, delta.x);
+
+                // 基础球体坐标
+                vec2 baseSphereUV = center + vec2(cos(angle), sin(angle)) * projectedDist;
+
+                // 旋转后的球体坐标
+                vec2 rotatedAngle = vec2(
+                    cos(angle + totalRotation),
+                    sin(angle + totalRotation)
+                );
+                vec2 rotatedSphereUV = center + rotatedAngle * projectedDist;
+
+                sphereUV = rotatedSphereUV;
+            } else {
+                // 球体外部：使用原始坐标
+                sphereUV = uv;
+            }
+
+            // 阶段控制：
+            // 阶段1（progress 0-0.33）：旧图从平面逐渐变成球体
+            // 阶段2（progress 0.33-0.67）：球体旋转，从旧图过渡到新图
+            // 阶段3（progress 0.67-1.0）：新图从球体逐渐变成平面
+
+            vec2 fromUV;
+            vec2 toUV;
+            float fromSphere = 0.0;
+            float toSphere = 0.0;
+
+            if (progress < 0.33) {
+                // 阶段1：旧图从平面变成球体
+                float phase1Progress = progress / 0.33;
+                float easePhase1 = phase1Progress * phase1Progress * (3.0 - 2.0 * phase1Progress);
+
+                // 计算未旋转的球体坐标
+                float angle = atan(delta.y, delta.x);
+                float normalizedDist = clamp(dist / maxDist, 0.0, 1.0);
+                float sphereHeight = sqrt(1.0 - normalizedDist * normalizedDist);
+                float projectedDist = dist * sphereHeight * 1.2;
+                vec2 unrotatedSphereUV = center + vec2(cos(angle), sin(angle)) * projectedDist;
+
+                // 从平面坐标过渡到球体坐标
+                fromUV = mix(uv, unrotatedSphereUV, easePhase1 * sphereMask);
+                toUV = uv;
+
+                fromSphere = easePhase1 * sphereMask;
+
+                // 采样
+                colorFrom = texture(from, clamp(fromUV, 0.0, 1.0));
+                colorTo = vec4(0.0);
+                mixFactor = 0.0;
+            } else if (progress < 0.67) {
+                // 阶段2：球体旋转，从旧图过渡到新图
+                float phase2Progress = (progress - 0.33) / 0.34;
+                float easePhase2 = phase2Progress * phase2Progress * (3.0 - 2.0 * phase2Progress);
+
+                // 计算旋转前后的球体坐标
+                float angle = atan(delta.y, delta.x);
+                float normalizedDist = clamp(dist / maxDist, 0.0, 1.0);
+                float sphereHeight = sqrt(1.0 - normalizedDist * normalizedDist);
+                float projectedDist = dist * sphereHeight * 1.2;
+
+                vec2 startSphereUV = center + vec2(cos(angle), sin(angle)) * projectedDist;
+                vec2 endSphereUV = center + vec2(cos(angle + totalRotation), sin(angle + totalRotation)) * projectedDist;
+
+                fromUV = startSphereUV * sphereMask + uv * (1.0 - sphereMask);
+                toUV = endSphereUV * sphereMask + uv * (1.0 - sphereMask);
+
+                // 采样
+                vec4 fromColor = texture(from, clamp(fromUV, 0.0, 1.0));
+                vec4 toColor = texture(to, clamp(toUV, 0.0, 1.0));
+
+                // 混合
+                colorFrom = fromColor * (1.0 - easePhase2);
+                colorTo = toColor * easePhase2;
+                mixFactor = easePhase2;
+            } else {
+                // 阶段3：新图从球体变成平面
+                float phase3Progress = (progress - 0.67) / 0.33;
+                float easePhase3 = phase3Progress * phase3Progress * (3.0 - 2.0 * phase3Progress);
+
+                // 计算旋转后的球体坐标
+                float angle = atan(delta.y, delta.x);
+                float normalizedDist = clamp(dist / maxDist, 0.0, 1.0);
+                float sphereHeight = sqrt(1.0 - normalizedDist * normalizedDist);
+                float projectedDist = dist * sphereHeight * 1.2;
+                vec2 rotatedSphereUV = center + vec2(cos(angle + totalRotation), sin(angle + totalRotation)) * projectedDist;
+
+                // 从球体坐标过渡到平面坐标
+                toUV = mix(rotatedSphereUV, uv, easePhase3);
+                fromUV = uv;
+
+                toSphere = (1.0 - easePhase3) * sphereMask;
+
+                // 采样
+                colorFrom = vec4(0.0);
+                colorTo = texture(to, clamp(toUV, 0.0, 1.0));
+                mixFactor = 1.0;
+            }
+
+            // 添加球体边缘光效和阴影
+            float edgeGlow = smoothstep(0.25, 0.3, dist) * (1.0 - smoothstep(0.3, 0.35, dist));
+            float glowIntensity = 1.0 - abs(progress - 0.5) * 2.0;
+            if (edgeGlow > 0.05) {
+                vec3 glowColor = vec3(0.3, 0.6, 1.0) * edgeGlow * glowIntensity * 0.5;
+                colorFrom.rgb += glowColor;
+                colorTo.rgb += glowColor;
+            }
+
+            // 添加球体内部阴影效果
+            float shadow = 1.0 - smoothstep(0.0, 0.3, dist);
+            shadow *= (fromSphere + toSphere);
+            if (shadow > 0.05) {
+                colorFrom.rgb *= (1.0 - shadow * 0.1);
+                colorTo.rgb *= (1.0 - shadow * 0.1);
+            }
+
+            break;
+        }
+
+        case 44: // 棱镜折射效果
+        {
+            // 类似透过棱镜看到的效果，色彩分离
+            vec2 center = vec2(0.5, 0.5);
+            vec2 delta = uv - center;
+            float dist = length(delta);
+            
+            // 创建三角形棱镜形状
+            float angle = atan(delta.y, delta.x);
+            float prismAngle = angle + progress * 6.28318;  // 旋转棱镜
+            
+            // 创建6个三角形棱镜面
+            float prismMask = 0.0;
+            for (int i = 0; i < 6; i++) {
+                float sectorAngle = prismAngle + float(i) * 1.0472;  // 60度
+                float angleDiff = mod(abs(angle - sectorAngle), 6.28318);
+                if (angleDiff > 3.14159) angleDiff = 6.28318 - angleDiff;
+                
+                // 在扇形区域内
+                if (angleDiff < 0.5 && dist < 0.5) {
+                    prismMask = 1.0;
+                    break;
+                }
+            }
+            
+            // 色彩分离：对RGB通道分别应用不同的偏移
+            float refractStrength = 0.03 * prismMask * (1.0 - abs(progress - 0.5) * 2.0);
+            
+            vec2 uvR = uv + vec2(refractStrength, 0.0);
+            vec2 uvG = uv + vec2(-refractStrength * 0.5, refractStrength * 0.5);
+            vec2 uvB = uv + vec2(0.0, -refractStrength);
+            
+            // 采样旧图的RGB分离版本
+            vec4 fromR = texture(from, uvR);
+            vec4 fromG = texture(from, uvG);
+            vec4 fromB = texture(from, uvB);
+            
+            vec4 toR = texture(to, uvR);
+            vec4 toG = texture(to, uvG);
+            vec4 toB = texture(to, uvB);
+            
+            // 根据棱镜区域和进度混合
+            if (prismMask > 0.5) {
+                float refractMix = smoothstep(0.3, 0.7, dist);
+                mixFactor = progress;
+                
+                colorFrom = vec4(fromR.r, fromG.g, fromB.b, fromR.a);
+                colorTo = vec4(toR.r, toG.g, toB.b, toR.a);
+            }
+            break;
+        }
+
+        case 45: // 螺旋变形效果
+        {
+            vec2 center = vec2(0.5, 0.5);
+            vec2 delta = uv - center;
+            
+            float dist = length(delta);
+            float angle = atan(delta.y, delta.x);
+            
+            // 变形强度：从0增长到1再降到0，保证开始和结束都是原始图片
+            float deform = 1.0 - abs(progress - 0.5) * 2.0;
+            // 平滑缓动
+            deform = deform * deform * (3.0 - 2.0 * deform);
+            
+            // 总旋转：持续旋转，不倒退
+            float totalRotation = progress * 4.0 * 3.14159;
+            
+            // 螺旋扭曲
+            float twistAngle = angle + dist * 8.0 * deform;
+            // 持续旋转叠加
+            twistAngle += totalRotation * deform;
+            
+            // 距离变化
+            float newDist = dist * (1.0 + sin(progress * 3.14159 + dist * 5.0) * 0.2 * deform);
+            
+            // 变形后的UV
+            vec2 spiralUV = center + vec2(cos(twistAngle), sin(twistAngle)) * newDist;
+            
+            // 采样：都从螺旋UV采样，但混合比例不同
+            vec4 fromColor = texture(from, clamp(spiralUV, 0.0, 1.0));
+            vec4 toColor = texture(to, clamp(spiralUV, 0.0, 1.0));
+            
+            // 平滑混合：0→1
+            float easeProgress = progress * progress * (3.0 - 2.0 * progress);
+            mixFactor = easeProgress;
+            
+            colorFrom = fromColor * (1.0 - easeProgress);
+            colorTo = toColor * easeProgress;
+            
+            break;
+        }
+
+        case 46: // 马赛克旋转效果
+        {
+            // 马赛克块参数
+            float tileSize = 0.08;
+            vec2 tileIndex = floor(uv / tileSize);
+            vec2 tileCenter = (tileIndex + 0.5) * tileSize;
+            vec2 tileUV = uv - tileCenter;  // 相对中心的坐标
+
+            // 每个马赛克块的随机性
+            float tileSeed = random(tileIndex);
+            float tileOffset = tileSeed * 0.3;  // 每个块有不同的过渡时间偏移
+
+            // 计算每个块的进度（带随机偏移）
+            float localProgress = clamp((progress - tileOffset) / (1.0 - tileOffset * 0.5), 0.0, 1.0);
+
+            vec2 sampledUV;
+            vec4 finalColor;
+
+            if (localProgress < 0.5) {
+                // 前半段：旧图从原始状态旋转到180度
+                float t = localProgress * 2.0;  // 0到1
+                float rotation = t * 3.14159;  // 0到180度
+
+                // 旋转马赛克块内的UV坐标
+                float cosRot = cos(rotation);
+                float sinRot = sin(rotation);
+                vec2 rotatedUV;
+                rotatedUV.x = tileUV.x * cosRot - tileUV.y * sinRot;
+                rotatedUV.y = tileUV.x * sinRot + tileUV.y * cosRot;
+
+                // 转换回纹理坐标
+                sampledUV = tileCenter + rotatedUV;
+
+                // 采样旧图
+                finalColor = texture(from, clamp(sampledUV, 0.0, 1.0));
+
+                colorFrom = finalColor;
+                colorTo = finalColor;
+                mixFactor = 0.0;
+            } else {
+                // 后半段：新图从180度旋转到360度（完成一整圈）
+                // 计算后半段的归一化进度（0到1，确保所有块同步）
+                float phase2Progress = clamp((progress - 0.5 - tileOffset * 0.25) / (0.5 - tileOffset * 0.25), 0.0, 1.0);
+
+                // 旋转角度：从180度旋转到360度
+                float rotation = 3.14159 + phase2Progress * 3.14159;  // 180度到360度
+
+                // 旋转马赛克块内的UV坐标
+                float cosRot = cos(rotation);
+                float sinRot = sin(rotation);
+                vec2 rotatedUV;
+                rotatedUV.x = tileUV.x * cosRot - tileUV.y * sinRot;
+                rotatedUV.y = tileUV.x * sinRot + tileUV.y * cosRot;
+
+                // 转换回纹理坐标
+                sampledUV = tileCenter + rotatedUV;
+
+                // 采样新图
+                finalColor = texture(to, clamp(sampledUV, 0.0, 1.0));
+
+                colorFrom = finalColor;
+                colorTo = finalColor;
+                mixFactor = 1.0;
+            }
+
+            // 添加马赛克块边缘效果
+            float distFromCenter = length(tileUV);
+            float edgeMask = smoothstep(tileSize * 0.45, tileSize * 0.5, distFromCenter);
+
+            // 边缘高光（随进度变化颜色）
+            vec3 edgeColor = mix(vec3(0.5, 0.7, 1.0), vec3(1.0, 0.6, 0.3), localProgress);
+            colorFrom.rgb = mix(colorFrom.rgb, edgeColor, edgeMask * 0.2);
+            colorTo.rgb = mix(colorTo.rgb, edgeColor, edgeMask * 0.2);
+
+            break;
+        }
+
+        case 47: // 液态融合效果
+        {
+            // 两张图片像液体一样融合混合，带有扭曲效果
+            // 使用正弦波创建液态扭曲
+            vec2 distortUV = uv;
+            
+            float time = progress * 6.28318;
+            distortUV.x += sin(uv.y * 10.0 + time) * 0.02 * sin(progress * 3.14159);
+            distortUV.y += cos(uv.x * 10.0 + time) * 0.02 * sin(progress * 3.14159);
+            
+            // 液态混合：使用噪声或波浪函数
+            float wave1 = sin(distortUV.x * 8.0 + time) * 0.5 + 0.5;
+            float wave2 = sin(distortUV.y * 8.0 + time * 0.7) * 0.5 + 0.5;
+            float liquidMix = (wave1 + wave2) * 0.5;
+            
+            // 混合因子随进度变化
+            mixFactor = smoothstep(liquidMix - 0.3, liquidMix + 0.3, progress);
+            
+            // 应用扭曲到颜色采样
+            colorFrom = texture(from, distortUV);
+            colorTo = texture(to, distortUV);
+            
+            // 添加液态光泽效果
+            float shine = sin(distortUV.x * 15.0 + time * 1.5) * sin(distortUV.y * 15.0 + time * 1.2);
+            if (shine > 0.8) {
+                colorFrom.rgb += vec3(0.3, 0.5, 0.8) * (shine - 0.8) * 0.5;
+                colorTo.rgb += vec3(0.3, 0.5, 0.8) * (shine - 0.8) * 0.5;
+            }
             break;
         }
 

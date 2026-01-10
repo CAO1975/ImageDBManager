@@ -64,12 +64,12 @@ signals:
     void importProgress(int current, int total, const QString &currentFile, const QString &currentFolder);
     void importFinished(bool success, int importedCount, int totalCount);
     void importError(const QString &error);
-    
+
     // 异步导出信号
     void exportProgress(int current, int total, const QString &currentFile, const QString &targetFolder);
     void exportFinished(bool success, int exportedCount, int totalCount, const QString &targetFolder);
     void exportError(const QString &error);
-    
+
     // 图片尺寸信号（供ImageProvider使用）
     void imageSizeLoaded(int imageId, int width, int height);
 
