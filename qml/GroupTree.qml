@@ -238,7 +238,7 @@ Item {
         id: groupDelegate
         Item {
             id: delegateRoot
-            width: parent.width
+            width: ListView.view ? ListView.view.width : parent ? parent.width : 100
             height: 30
             
             // 选中状态背景
@@ -336,12 +336,10 @@ Item {
                 // 处理右键点击
                 onReleased: {
                     if (mouse.button === Qt.RightButton) {
-                        // 只有普通分组（id > 0）可以重命名
-                        if (model.id > 0) {
-                            console.log(">>> Right clicked on group ID:", model.id, "Name:", model.name);
-                            // 发送右键点击信号给父组件
-                            groupTree.groupRightClicked(model.id, model.name)
-                        }
+                        // 所有分组（包括未分组）都可以右键
+                        console.log(">>> Right clicked on group ID:", model.id, "Name:", model.name);
+                        // 发送右键点击信号给父组件
+                        groupTree.groupRightClicked(model.id, model.name)
                     }
                 }
             }

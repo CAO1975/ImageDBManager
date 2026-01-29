@@ -1,8 +1,8 @@
-// ImageList.qml - 竖向CoverFlow效果（完整版，保留所有原始代码）
-import QtQuick 6.10
-import QtQuick.Controls 6.10
-import QtQuick.Layouts 6.10
-import QtQuick.Controls.Universal 6.10
+// ImageList.qml - 图片列表组件（已注释掉CoverFlow 3D效果）
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+import QtQuick.Controls.Universal
 
 Item {
     property color customBackground: '#112233'
@@ -66,29 +66,28 @@ Item {
     property string contextImageFilename: ""
     signal imageSelected(int imageId)
     signal imageRightClicked(int imageId, string filename, string action)
-    
+
     Component.onCompleted: loadImages()
-    
+
     property int currentGroupId: -1
-    
+
     function loadImages(groupId) {
         currentGroupId = groupId || -1
         imageModel.clear()
         var imageIds = database.getAllImageIds(currentGroupId)
-        
+
         for (var i = 0; i < imageIds.length; i++) {
             var imageId = imageIds[i]
             var filename = database.getImageFilename(imageId)
-            
+
             if (filename) {
                 imageModel.append({
                     "id": imageId,
-                    "filename": filename,
-                    "itemHeight": 140
+                    "filename": filename
                 })
             }
         }
-        
+
         if (imageModel.count > 0) {
             selectedImageId = imageModel.get(0).id
             imageSelected(selectedImageId)
@@ -174,6 +173,8 @@ Item {
             width: listView.width - 10
 
             // ===== CoverFlow 3D 变换核心 =====
+            // 注释掉3D效果，使用普通列表显示
+            /*
             property real rawHeight: Math.max(80, Math.min(250, model.itemHeight))
             property real centerOffset: y - listView.contentY - listView.height/2 + rawHeight/2
             property real distanceRatio: Math.min(1.0, Math.abs(centerOffset) / (listView.height/2))
@@ -182,7 +183,7 @@ Item {
             property real heightCompensation: distanceRatio > 0.01 ? 1.0 / Math.cos(tiltAngle * Math.PI / 180) : 1.0
 
             height: rawHeight
-            
+
             transform: [
                 Rotation {
                     origin.x: cardRoot.width/2
@@ -197,16 +198,20 @@ Item {
                     yScale: 1.2 - distanceRatio * 0.3
                 }
             ]
-            
+
             z: -Math.abs(centerOffset)
-            
+            */
+
+            property real thumbnailWidth: 110
+            property real thumbnailHeight: thumbnail.implicitHeight || 140
+
+            height: thumbnailHeight + 10
+
             radius: 8
             color: model.id === selectedImageId ? customAccent : customBackground
             border.color: "transparent"
             border.width: 1
-            
-            Behavior on height { NumberAnimation { duration: 200 } }
-            
+
             MouseArea {
                 anchors.fill: parent
                 hoverEnabled: true
@@ -224,42 +229,35 @@ Item {
                     }
                 }
             }
-            
+
             // ===== 修复：使用 RowLayout 替代 Row =====
             RowLayout {
                 anchors.fill: parent
-                anchors.margins: 5
+                anchors.leftMargin: 5
+                anchors.rightMargin: 5
+                anchors.topMargin: 0
+                anchors.bottomMargin: 0
                 spacing: 8
-                
+
                 Image {
                     id: thumbnail
-                    width: 140
-                    height: parent.height - 8
+                    width: thumbnailWidth
+                    height: parent.height - 10
                     source: "image://imageprovider/" + model.id
                     fillMode: Image.PreserveAspectFit
                     Layout.alignment: Qt.AlignVCenter
-                    
-                    onStatusChanged: {
-                        if (status === Image.Ready) {
-                            var aspectRatio = sourceSize.width / sourceSize.height
-                            var calculatedHeight = Math.round(140 / aspectRatio) + 16
-                            calculatedHeight = Math.max(60, Math.min(calculatedHeight, 200))
-                            imageModel.setProperty(index, "itemHeight", calculatedHeight)
-                            listView.forceLayout()
-                        }
-                    }
                 }
-                
+
                 Text {
                     Layout.fillWidth: true    // 填充剩余宽度
                     Layout.alignment: Qt.AlignVCenter
-                    
+
                     text: model.filename || "无文件名"
                     font.pointSize: 11
                     font.bold: true
                     elide: Text.ElideRight
                     verticalAlignment: Text.AlignVCenter
-                    
+
                     color: model.id === selectedImageId ? getTextColor(customAccent) : getTextColor(customBackground)
                 }
             }

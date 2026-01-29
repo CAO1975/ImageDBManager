@@ -42,9 +42,11 @@ public:
     Q_INVOKABLE bool deleteGroup(int groupId); // 删除分组（级联删除子分组和图片）
     Q_INVOKABLE int getSubgroupCount(int groupId); // 新增：获取子分组数量
     Q_INVOKABLE int getImageCountForGroup(int groupId); // 新增：获取分组下的图片数量
+    Q_INVOKABLE int getImageCountDirect(int groupId); // 新增：获取分组直接包含的图片数量（不包括子孙分组）
     Q_INVOKABLE int getGroupIdByName(const QString &name, int parentId = -1);
 
     Q_INVOKABLE QString getGroupPath(int groupId); // 新增：获取分组完整路径
+    Q_INVOKABLE QList<int> getAllDescendantGroupIds(int groupId); // 获取分组及其所有子孙分组ID
     
     // 异步导入相关方法
     Q_INVOKABLE void startAsyncImport(const QList<QUrl> &fileUrls, int parentGroupId);

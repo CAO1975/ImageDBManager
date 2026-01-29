@@ -276,7 +276,7 @@ bool Database::insertImage(const QString &fileName, const QImage &image, int gro
     // 1. 获取原始图片格式
     QString fileExtension = QFileInfo(fileName).suffix().toUpper();
     QString imageFormat = "JPG"; // 默认格式
-    
+
     // 根据文件扩展名设置图片格式
     if (fileExtension == "PNG") {
         imageFormat = "PNG";
@@ -289,7 +289,7 @@ bool Database::insertImage(const QString &fileName, const QImage &image, int gro
     } else if (fileExtension == "WEBP") {
         imageFormat = "WEBP";
     }
-    
+
     // 2. 直接从文件读取原始图片数据，避免重新编码导致的质量损失和性能问题
     QFile file(fileName);
     if (!file.open(QIODevice::ReadOnly)) {
@@ -298,20 +298,20 @@ bool Database::insertImage(const QString &fileName, const QImage &image, int gro
     }
     QByteArray byteArray = file.readAll();
     file.close();
-    
+
     // 3. 生成缩略图（宽度固定为140px，高度自适应，保持比例）
     QImage thumbnail = image.scaled(
         140, // 固定宽度
-        140 * 2, // 最大高度
+        140 * 1.5, // 最大高度210px
         Qt::KeepAspectRatio, // 保持比例
         Qt::FastTransformation // 快速缩放，缩略图不需要平滑算法，提高生成速度
     );
-    
+
     QByteArray thumbnailData;
     QBuffer thumbnailBuffer(&thumbnailData);
     thumbnailBuffer.open(QIODevice::WriteOnly);
     thumbnail.save(&thumbnailBuffer, "JPG", 85); // 缩略图统一使用JPG格式，质量85
-    
+
     // 4. 准备SQL语句并添加绑定值
     QSqlQuery query;
     if (groupId > 0) {
@@ -328,12 +328,12 @@ bool Database::insertImage(const QString &fileName, const QImage &image, int gro
         query.addBindValue(imageFormat);
         query.addBindValue(thumbnailData);
     }
-    
+
     if (!query.exec()) {
         m_lastError = query.lastError().text();
         return false;
     }
-    
+
     return true;
 }
 
@@ -698,7 +698,7 @@ int Database::getImageCountForGroup(int groupId)
     // 计算指定分组及其所有子分组下的图片数量
     int count = 0;
     QSqlQuery query;
-    
+
     // 使用递归CTE查询获取所有子孙分组ID，包括当前分组
     QString recursiveQuery = QString(R"(
         WITH RECURSIVE all_groups AS (
@@ -707,19 +707,40 @@ int Database::getImageCountForGroup(int groupId)
             SELECT g.id FROM groups g
             JOIN all_groups ag ON g.parent_id = ag.id
         )
-        SELECT COUNT(*) FROM images 
+        SELECT COUNT(*) FROM images
         WHERE group_id IN (SELECT id FROM all_groups)
     )").arg(groupId);
-    
+
     if (!query.exec(recursiveQuery)) {
         m_lastError = query.lastError().text();
         return 0;
     }
-    
+
     if (query.next()) {
         count = query.value(0).toInt();
     }
-    
+
+    return count;
+}
+
+int Database::getImageCountDirect(int groupId)
+{
+    // 计算指定分组直接包含的图片数量（不包括子孙分组）
+    int count = 0;
+    QSqlQuery query;
+
+    query.prepare("SELECT COUNT(*) FROM images WHERE group_id = ?");
+    query.addBindValue(groupId);
+
+    if (!query.exec()) {
+        m_lastError = query.lastError().text();
+        return 0;
+    }
+
+    if (query.next()) {
+        count = query.value(0).toInt();
+    }
+
     return count;
 }
 
@@ -778,12 +799,12 @@ int Database::getImageByteSize(int imageId)
     QSqlQuery query;
     query.prepare("SELECT LENGTH(image_data) FROM images WHERE id = ?");
     query.addBindValue(imageId);
-    
+
     if (!query.exec() || !query.next()) {
         m_lastError = query.lastError().text();
         return 0;
     }
-    
+
     return query.value(0).toInt();
 }
 
@@ -814,6 +835,40 @@ QString Database::getGroupPath(int groupId)
     }
     
     return pathParts.join("\\");
+}
+
+QList<int> Database::getAllDescendantGroupIds(int groupId)
+{
+    QList<int> descendantIds;
+
+    if (groupId <= 0) {
+        return descendantIds;
+    }
+
+    QSqlQuery query;
+
+    // 使用递归CTE查询获取分组及其所有子孙分组ID
+    QString groupQuery = QString(R"(
+        WITH RECURSIVE all_groups AS (
+            SELECT id FROM groups WHERE id = %1
+            UNION ALL
+            SELECT g.id FROM groups g
+            JOIN all_groups ag ON g.parent_id = ag.id
+        )
+        SELECT id FROM all_groups
+    )").arg(groupId);
+
+    if (!query.exec(groupQuery)) {
+        m_lastError = query.lastError().text();
+        return descendantIds;
+    }
+
+    // 收集所有分组ID
+    while (query.next()) {
+        descendantIds.append(query.value(0).toInt());
+    }
+
+    return descendantIds;
 }
 
 

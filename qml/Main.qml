@@ -231,13 +231,20 @@ ApplicationWindow {
         console.log("Group path for ID " + groupId + ": " + fullPath);
         return fullPath;
     }
-    
-    // 获取当前分组图片数量
+
+    // 获取当前分组图片数量（包括所有子孙分组）
     function updateImageCount(groupId) {
-        var imageIds = database.getAllImageIds(groupId);
-        console.log("Image IDs for group " + groupId + ": " + JSON.stringify(imageIds));
-        var count = imageIds.length;
-        console.log("Image count for group " + groupId + ": " + count);
+        var count = 0;
+        if (groupId === -1) {
+            // 未分组：只统计未分组的图片
+            var imageIds = database.getAllImageIds(groupId);
+            count = imageIds.length;
+            console.log("Image count for ungrouped: " + count);
+        } else {
+            // 已分组：统计该分组及其所有子孙分组的图片
+            count = database.getImageCountForGroup(groupId);
+            console.log("Image count for group " + groupId + " (including descendants): " + count);
+        }
         return count;
     }
     
@@ -1115,7 +1122,7 @@ ApplicationWindow {
     // 通用分组选择对话框
     Dialog {
         id: groupDialog
-        title: dialogMode === "moveGroup" ? "调整分组到目标分组" : dialogMode === "moveImage" ? "调整图片到指定分组" : "选择或创建分组"
+        title: dialogMode === "moveGroup" ? "调整分组到目标分组" : dialogMode === "moveImage" ? "调整图片到指定分组" : dialogMode === "createGroup" ? "创建新分组" : "选择或创建分组"
         width: 480
         height: 500 // 调整为更紧凑的尺寸
         modal: true
@@ -1126,7 +1133,7 @@ ApplicationWindow {
         // 基础属性
         property int selectedGroupId: -1
         property int selectedParentGroupId: -1
-        property string dialogMode: "import" // "import"、"moveGroup"或"moveImage"
+        property string dialogMode: "import" // "import"、"moveGroup"、"moveImage"或"createGroup"
 
         // 导入图片相关属性
         property var selectedFiles: []
@@ -1134,11 +1141,58 @@ ApplicationWindow {
         // 调整分组相关属性
         property int groupToMoveId: -1 // 要调整的分组ID
         property int imageToMoveId: -1 // 要调整的图片ID
-        
+
+        // 目标分组相关属性
+        property string targetGroupName: ""
+        property string targetGroupWarning: ""
+
         ColumnLayout {
             anchors.fill: parent
             spacing: 10
-            
+
+            // 提示标签
+            Text {
+                id: hintText
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                font.pointSize: 12
+                color: Universal.foreground
+                visible: groupDialog.dialogMode !== "createGroup"
+
+                text: {
+                    if (groupDialog.dialogMode === "import") {
+                        if (groupDialog.targetGroupName === "" || groupDialog.targetGroupName === "未分组") {
+                            "将导入到：未分组"
+                        } else {
+                            "将导入到分组：" + groupDialog.targetGroupName
+                        }
+                    } else if (groupDialog.dialogMode === "moveImage") {
+                        if (groupDialog.targetGroupName === "" || groupDialog.targetGroupName === "未分组") {
+                            "将调整到：未分组"
+                        } else {
+                            "将调整到分组：" + groupDialog.targetGroupName
+                        }
+                    } else if (groupDialog.dialogMode === "moveGroup") {
+                        if (groupDialog.targetGroupName === "" || groupDialog.targetGroupName === "未分组") {
+                            "将调整到：根分组"
+                        } else {
+                            "将调整到分组：" + groupDialog.targetGroupName
+                        }
+                    }
+                }
+            }
+
+            // 警告标签
+            Text {
+                id: warningText
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                font.pointSize: 12
+                color: "#FF6B6B"
+                visible: text !== "" && groupDialog.dialogMode !== "createGroup"
+                text: groupDialog.targetGroupWarning
+            }
+
             // 使用GroupTree组件代替ListView
             GroupTree {
                 id: dialogGroupTree
@@ -1146,27 +1200,38 @@ ApplicationWindow {
                 Layout.fillHeight: true // 让GroupTree填充剩余的高度
                 customBackground: window.customBackground
                 customAccent: window.customAccent
-                
+
                 onGroupSelected: {
                     groupDialog.selectedGroupId = groupId;
                     groupDialog.selectedParentGroupId = groupId;
-                    console.log("Selected group in dialog: " + groupId);
+
+                    // 获取选中的分组名称
+                    if (groupId === -1) {
+                        groupDialog.targetGroupName = "未分组"
+                    } else {
+                        groupDialog.targetGroupName = database.getGroupName(groupId)
+                    }
+
+                    // 检查并显示警告
+                    groupDialog.checkWarnings()
+
+                    console.log("Selected group in dialog: " + groupId + ", Name: " + groupDialog.targetGroupName);
                 }
             }
-            
+
             // 新建分组输入框和按钮的水平容器
             RowLayout {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 28
                 spacing: 10
-                
+
                 // 新建分组输入框
                 StyledTextField {
                     id: groupNameInput
                     placeholderText: "输入分组名称"
                     Layout.fillWidth: true
                 }
-                
+
                 // 新建分组按钮
                 ThemeColorButton {
                     text: "新建分组"
@@ -1180,7 +1245,7 @@ ApplicationWindow {
                             console.log("请输入分组名称")
                             return
                         }
-                        
+
                         let parentId = groupDialog.selectedParentGroupId
                         // 处理根分组和子分组的创建逻辑
                         if (parentId === 0) {
@@ -1195,7 +1260,7 @@ ApplicationWindow {
                             // 选择了其他分组，创建该分组下的子分组
                             console.log("Creating subgroup: " + groupName + " under parent group ID: " + parentId)
                         }
-                        
+
                         // 调用createGroup函数，传入选中的分组ID作为父分组ID
                         let success = database.createGroup(groupName, parentId)
                         if (success) {
@@ -1211,13 +1276,53 @@ ApplicationWindow {
                 }
             }
         }
+
+        // 检查警告信息
+        function checkWarnings() {
+            groupDialog.targetGroupWarning = ""
+
+            if (groupDialog.dialogMode === "moveGroup") {
+                let groupToMove = groupDialog.groupToMoveId
+                let targetGroup = groupDialog.selectedGroupId
+
+                // 禁止将分组调整到自己
+                if (groupToMove === targetGroup) {
+                    groupDialog.targetGroupWarning = "调整的目标分组不能是自己"
+                    return
+                }
+
+                // 如果选择了未分组，调整为根分组
+                if (targetGroup === -1) {
+                    targetGroup = 0
+                }
+
+                // 禁止将分组移动到其子孙分组
+                let descendantIds = database.getAllDescendantGroupIds(groupToMove)
+                if (descendantIds.indexOf(targetGroup) !== -1) {
+                    groupDialog.targetGroupWarning = "不能调整到自己的子孙分组"
+                }
+            }
+        }
         
         // 使用默认的标准按钮，移除自定义按钮区域
         
         // 对话框打开时刷新分组树数据
         onOpened: {
             dialogGroupTree.loadGroups()
-            console.log("=== Group dialog opened, refreshed group tree ===")
+
+            // 初始化提示文本
+            if (groupDialog.dialogMode === "import") {
+                groupDialog.targetGroupName = "未分组"
+            } else if (groupDialog.dialogMode === "moveImage") {
+                groupDialog.targetGroupName = "未分组"
+            } else if (groupDialog.dialogMode === "moveGroup") {
+                groupDialog.targetGroupName = "根分组"
+            } else if (groupDialog.dialogMode === "createGroup") {
+                groupDialog.targetGroupName = ""
+            }
+            groupDialog.targetGroupWarning = ""
+
+            console.log("=== Group dialog opened, mode: " + groupDialog.dialogMode + ", refreshed group tree ===")
         }
         
         onAccepted: {
@@ -1225,7 +1330,7 @@ ApplicationWindow {
             if (groupDialog.selectedGroupId === -1) {
                 groupDialog.selectedGroupId = -1 // 未分组
             }
-            
+
             // 根据不同模式执行不同逻辑
             switch (groupDialog.dialogMode) {
                 case "moveGroup":
@@ -1246,20 +1351,20 @@ ApplicationWindow {
                 // 调整图片分组
                 let imageToMove = groupDialog.imageToMoveId
                 let targetGroup = groupDialog.selectedGroupId
-                
+
                 console.log("=== Move image called: " + imageToMove + " -> " + targetGroup)
-                
+
                 // 1. 验证参数有效性
                 if (imageToMove === -1) {
                     console.error("Invalid image to move: " + imageToMove)
                     return
                 }
-                
+
                 // 2. 如果选择了"未分组"，将其设置为-1
                 if (targetGroup === -1) {
                     console.log("=== Changed target group from -1 to -1 (ungrouped) ===")
                 }
-                
+
                 // 3. 执行图片分组调整
                 database.updateImageGroup(imageToMove, targetGroup)
                 // 4. 重新加载图片列表
@@ -1269,27 +1374,27 @@ ApplicationWindow {
                 // 调整分组
                 let groupToMove = groupDialog.groupToMoveId
                 let targetGroup = groupDialog.selectedGroupId
-                
+
                 console.log("=== Move group called: " + groupToMove + " -> " + targetGroup)
-                
+
                 // 1. 验证参数有效性
                 if (groupToMove === -1) {
                     console.error("Invalid group to move: " + groupToMove)
                     return
                 }
-                
-                // 2. 禁止将分组调整到自己
-                if (groupToMove === targetGroup) {
-                    console.error("Cannot move group to itself: " + groupToMove)
+
+                // 2. 如果有警告信息，不允许执行
+                if (groupDialog.targetGroupWarning !== "") {
+                    console.error("Cannot move group due to warning: " + groupDialog.targetGroupWarning)
                     return
                 }
-                
+
                 // 3. 如果选择了未分组，将其调整为根分组（parent_id=0）
                 if (targetGroup === -1) {
                     targetGroup = 0
                     console.log("=== Changed target group from -1 to 0 (root group) ===")
                 }
-                
+
                 // 4. 执行分组调整
                 database.updateGroupParent(groupToMove, targetGroup)
                 // 5. 重新加载分组数据
@@ -1303,24 +1408,31 @@ ApplicationWindow {
             let selectedFiles = groupDialog.selectedFiles
             let totalFiles = selectedFiles.length
             let parentGroupId = groupDialog.selectedGroupId
-            
+
             console.log("=== 开始异步导入图片 ===")
             console.log("总文件数: " + totalFiles)
             console.log("选择的父分组ID: " + parentGroupId)
-            
+
             // 重置进度条值
             importProgressBar.value = 0
             // 重置进度文本
             progressText.text = "导入图片: 0/0 (0%)"
             currentImageText.text = "正在导入: 准备中..."
             currentFolderText.text = "正在导入到分组: 准备中..."
-            
+
             // 显示进度对话框
             importProgressDialog.open()
-            
+
             // 使用database的异步导入方法
             database.startAsyncImport(selectedFiles, parentGroupId)
             console.log("异步导入已启动")
+        }
+
+        // 对话框关闭时刷新分组树（包括取消按钮）
+        onRejected: {
+            console.log("Group dialog rejected/closed, refreshing group tree")
+            // 无论何时关闭对话框，都刷新分组树以显示可能新增的分组
+            groupTree.loadGroups()
         }
     }
 
@@ -1328,9 +1440,19 @@ ApplicationWindow {
     Menu {
         id: groupContextMenu
         // 使用默认位置，或者从事件中获取位置
-        
+
+        MenuItem {
+            text: "创建新分组"
+            onClicked: {
+                // 设置对话框模式为创建分组
+                groupDialog.dialogMode = "createGroup"
+                groupDialog.open()
+            }
+        }
+
         MenuItem {
             text: "重命名分组"
+            enabled: contextMenuGroupId !== -1
             onClicked: {
                 renameDialog.title = "重命名分组"
                 renameDialog.selectedGroupId = contextMenuGroupId
@@ -1339,9 +1461,10 @@ ApplicationWindow {
                 renameDialog.open()
             }
         }
-        
+
         MenuItem {
             text: "删除分组"
+            enabled: contextMenuGroupId !== -1
             onClicked: {
                 // 显示确认删除对话框
                 confirmDeleteDialog.deleteType = "group"
@@ -1350,9 +1473,10 @@ ApplicationWindow {
                 confirmDeleteDialog.open()
             }
         }
-        
+
         MenuItem {
             text: "调整分组到目标分组"
+            enabled: contextMenuGroupId !== -1
             onClicked: {
                 // 设置对话框模式为移动分组
                 groupDialog.dialogMode = "moveGroup"
@@ -1360,16 +1484,13 @@ ApplicationWindow {
                 groupDialog.open()
             }
         }
-        
+
         MenuItem {
             text: "将分组内的图片导出"
+            enabled: contextMenuGroupId !== -1 && database.getImageCountDirect(contextMenuGroupId) > 0
             onClicked: {
                 // 实现分组内图片导出功能
-                var imageCount = database.getImageCountForGroup(contextMenuGroupId);
-                if (imageCount > 0) {
-                    // 弹出文件夹选择对话框
-                    exportFolderDialog.open();
-                }
+                exportFolderDialog.open();
             }
         }
     }
