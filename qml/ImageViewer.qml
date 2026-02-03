@@ -9,6 +9,9 @@ Item {
     property color customAccent: '#30638f'
     anchors.fill: parent
 
+    // 双击信号
+    signal imageDoubleClicked()
+
     // 可复用组件：主题化Rectangle
     component ThemedRectangle: Rectangle {
         property color bgColor: customBackground
@@ -73,6 +76,70 @@ Item {
     // 添加着色器过渡相关属性
     property int shaderEffectType: 0  // 0 = 溶解
     
+    // 暂停所有动画（用于全屏切换时）
+    function pauseAllAnimations() {
+        if (fadeAnimation.running) fadeAnimation.pause()
+        if (slideLeftAnimation.running) slideLeftAnimation.pause()
+        if (slideRightAnimation.running) slideRightAnimation.pause()
+        if (scaleAnimation.running) scaleAnimation.pause()
+        if (fadeScaleAnimation.running) fadeScaleAnimation.pause()
+        if (rotateAnimation.running) rotateAnimation.pause()
+        if (rotateRightAnimation.running) rotateRightAnimation.pause()
+        if (rotateLeft180Animation.running) rotateLeft180Animation.pause()
+        if (rotateRight180Animation.running) rotateRight180Animation.pause()
+        if (slideUpDownAnimation.running) slideUpDownAnimation.pause()
+        if (slideDownUpAnimation.running) slideDownUpAnimation.pause()
+        if (slideLeftDownToRightUpAnimation.running) slideLeftDownToRightUpAnimation.pause()
+        if (slideRightUpToLeftDownAnimation.running) slideRightUpToLeftDownAnimation.pause()
+        if (slideLeftUpToRightDownAnimation.running) slideLeftUpToRightDownAnimation.pause()
+        if (slideRightDownToLeftUpAnimation.running) slideRightDownToLeftUpAnimation.pause()
+        if (flipAnimation.running) flipAnimation.pause()
+        if (flipReverseAnimation.running) flipReverseAnimation.pause()
+        if (flipXDownAnimation.running) flipXDownAnimation.pause()
+        if (flipXUpAnimation.running) flipXUpAnimation.pause()
+        if (flipXTopAnimation.running) flipXTopAnimation.pause()
+        if (flipXBottomAnimation.running) flipXBottomAnimation.pause()
+        if (scaleTransitionAnimation.running) scaleTransitionAnimation.pause()
+        if (flipDiagonalAnimation.running) flipDiagonalAnimation.pause()
+        if (flipDiagonalReverseAnimation.running) flipDiagonalReverseAnimation.pause()
+        if (flipYLeftAnimation.running) flipYLeftAnimation.pause()
+        if (flipYRightAnimation.running) flipYRightAnimation.pause()
+        if (spiralFlyAnimation.running) spiralFlyAnimation.pause()
+        updateTimer.stop()
+    }
+
+    // 恢复/停止所有动画（用于退出全屏时）
+    function stopAllAnimations() {
+        fadeAnimation.stop()
+        slideLeftAnimation.stop()
+        slideRightAnimation.stop()
+        scaleAnimation.stop()
+        fadeScaleAnimation.stop()
+        rotateAnimation.stop()
+        rotateRightAnimation.stop()
+        rotateLeft180Animation.stop()
+        rotateRight180Animation.stop()
+        slideUpDownAnimation.stop()
+        slideDownUpAnimation.stop()
+        slideLeftDownToRightUpAnimation.stop()
+        slideRightUpToLeftDownAnimation.stop()
+        slideLeftUpToRightDownAnimation.stop()
+        slideRightDownToLeftUpAnimation.stop()
+        flipAnimation.stop()
+        flipReverseAnimation.stop()
+        flipXDownAnimation.stop()
+        flipXUpAnimation.stop()
+        flipXTopAnimation.stop()
+        flipXBottomAnimation.stop()
+        scaleTransitionAnimation.stop()
+        flipDiagonalAnimation.stop()
+        flipDiagonalReverseAnimation.stop()
+        flipYLeftAnimation.stop()
+        flipYRightAnimation.stop()
+        spiralFlyAnimation.stop()
+        updateTimer.stop()
+    }
+
     // 边界约束函数
     function constrainImageOffset() {
         // 使用 paintedWidth/paintedHeight 获取 Image.PreserveAspectFit 模式下的实际显示尺寸
@@ -436,7 +503,14 @@ Item {
             anchors.fill: parent
             hoverEnabled: true
             acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
-            
+            z: 100  // 确保在最上层
+
+            onDoubleClicked: function(mouse) {
+                // 双击进入全屏模式
+                console.log("ImageViewer MouseArea doubleClicked")
+                imageDoubleClicked()
+            }
+
             onPressed: {
                 if (!transitioning) {
                     isDragging = true
@@ -444,7 +518,7 @@ Item {
                     cursorShape = Qt.ClosedHandCursor
                 }
             }
-            
+
             onReleased: {
                 isDragging = false
                 cursorShape = Qt.OpenHandCursor
@@ -540,7 +614,7 @@ Item {
     ParallelAnimation {
         id: scaleAnimation
         NumberAnimation { target: currentImageItem; property: "scale"; from: 1.0; to: 0.3; duration: transitionDuration; easing.type: animEasing }
-        NumberAnimation { target: nextImageItem; property: "scale"; from: 2.0; to: 1.0; duration: transitionDuration; easing.type: animEasing }
+        NumberAnimation { target: nextImageItem; property: "scale"; from: 3.0; to: 1.0; duration: transitionDuration; easing.type: animEasing }
         NumberAnimation { target: currentImageItem; property: "opacity"; from: 1.0; to: 0.0; duration: transitionDuration; easing.type: animEasing }
         NumberAnimation { target: nextImageItem; property: "opacity"; from: 0.0; to: 1.0; duration: transitionDuration; easing.type: animEasing }
         onRunningChanged: { if (!running && transitioning) endTransition() }
