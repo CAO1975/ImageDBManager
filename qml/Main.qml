@@ -1,4 +1,4 @@
-// Main.qml - 稳定深色主题版本（无主题切换，分隔条可拖拽）
+// Main.qml - 单窗口全屏方案（简化版）
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -15,9 +15,8 @@ ApplicationWindow {
     minimumHeight: 580
     title: "ImageDBManager"
 
-    // 🔑 关键：设置窗口背景透明
+    // 关键：设置窗口背景透明
     color: "transparent"
-
 
     // 使用Universal暗色主题
     Universal.theme: Universal.Dark
@@ -26,26 +25,22 @@ ApplicationWindow {
     property color customBackground: '#0d1a28'
     property color customAccent: '#30638f'
 
-    // 共享的过渡设置属性（窗口和全屏共用）
-    property int sharedTransitionIndex: 0  // 0 = 随机
-    property int sharedDurationIndex: 2    // 2 = 1秒
+    // 全屏状态 - 现在只是控制UI布局，不是真正的全屏窗口
+    property bool isFullscreen: false
+    // 记住窗口模式时的状态
+    property int windowedVisibility: Window.Windowed
 
-    // 当共享属性改变时，自动更新两个ImageViewer
-    onSharedTransitionIndexChanged: {
-        var transitionType = sharedTransitionIndex === 0 ? -1 : sharedTransitionIndex - 1
-        imageViewer.transitionType = transitionType
-        if (fullScreenWindow.visible) {
-            fsImageViewer.transitionType = transitionType
-        }
-    }
-    onSharedDurationIndexChanged: {
-        var durationValues = [0, 500, 1000, 1500, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
-        var duration = durationValues[sharedDurationIndex]
-        imageViewer.transitionDuration = duration
-        if (fullScreenWindow.visible) {
-            fsImageViewer.transitionDuration = duration
-        }
-    }
+    // 过渡设置属性
+    property int transitionIndex: 0  // 0 = 随机
+    property int durationIndex: 2    // 2 = 1秒
+
+    // 幻灯片播放属性
+    property bool slideshowActive: false
+    property int slideshowInterval: 3000  // 默认3秒
+
+    // 浮动工具栏状态
+    property bool toolbarVisible: false
+    property bool anyPopupOpen: false
 
     // 右键菜单上下文属性
     property int contextMenuGroupId: -1
@@ -53,6 +48,9 @@ ApplicationWindow {
 
     // 当前选中的分组ID
     property int currentGroupId: -1
+
+    // 当前显示的图片ID - 只有一个查看器，不需要共享
+    property int currentImageId: -1
 
     // 标题栏显示信息
     property string groupPath: ""
@@ -311,26 +309,68 @@ ApplicationWindow {
         console.log("Current image info: " + info);
         return info;
     }
-    
-    onVisibilityChanged: {
-        if (window.visibility === Window.Maximized) {
-            maxIcon.text = "❐"
-        } else {
-            maxIcon.text = "□"
-        }
+
+    // 进入全屏模式
+    function enterFullscreen() {
+        if (window.currentImageId === -1) return
+        isFullscreen = true
+        visibility = Window.FullScreen
+        // 重置工具栏状态
+        toolbarVisible = false
+        hideToolbarTimer.stop()
+        // 确保全屏图片查看器获得焦点
+        Qt.callLater(function() {
+            fullscreenImageViewer.forceActiveFocus()
+        })
     }
-    
+
+    // 退出全屏模式
+    function exitFullscreen() {
+        isFullscreen = false
+        visibility = Window.Windowed
+        // 停止幻灯片播放
+        slideshowActive = false
+        slideshowTimer.stop()
+    }
+
+    // 加载上一张图片
+    function loadPreviousImage() {
+        var count = imageList.imageCount()
+        if (count === 0) return
+        var newIndex = imageList.currentIndex - 1
+        if (newIndex < 0) newIndex = count - 1
+        imageList.currentIndex = newIndex
+    }
+
+    // 加载下一张图片
+    function loadNextImage() {
+        var count = imageList.imageCount()
+        if (count === 0) return
+        var newIndex = imageList.currentIndex + 1
+        if (newIndex >= count) newIndex = 0
+        imageList.currentIndex = newIndex
+    }
+
     // 窗口关闭前保存设置
     onClosing: {
         saveSettings()
     }
+
+    // 幻灯片定时器
+    Timer {
+        id: slideshowTimer
+        interval: window.slideshowInterval
+        repeat: true
+        onTriggered: {
+            if (window.slideshowActive) {
+                window.loadNextImage()
+            }
+        }
+    }
     
     // 组件加载完成后初始化数据
     Component.onCompleted: {
-        // 主界面初始化完成
         console.log("Main window initialized")
-        
-        // 加载设置
         loadSettings()
     }
     
@@ -338,15 +378,11 @@ ApplicationWindow {
     function loadSettings() {
         // 读取过渡效果设置
         let transValue = database.getSetting("QTtrans", "0")
-        let transIndex = parseInt(transValue)
-        // 同步到共享属性（这会更新下拉框和ImageViewer）
-        sharedTransitionIndex = transIndex
+        transitionIndex = parseInt(transValue)
         
         // 读取过渡时间设置
         let transTimeValue = database.getSetting("QTtransTime", "2")
-        let transTimeIndex = parseInt(transTimeValue)
-        // 同步到共享属性（这会更新下拉框和ImageViewer）
-        sharedDurationIndex = transTimeIndex
+        durationIndex = parseInt(transTimeValue)
         
         // 读取窗口位置和大小
         let windowLeft = database.getSetting("WindowLeft", "100")
@@ -385,10 +421,10 @@ ApplicationWindow {
     // 保存设置
     function saveSettings() {
         // 保存过渡效果设置
-        database.saveSetting("QTtrans", transitionComboBox.currentIndex.toString())
+        database.saveSetting("QTtrans", transitionIndex.toString())
         
         // 保存过渡时间设置
-        database.saveSetting("QTtransTime", durationComboBox.currentIndex.toString())
+        database.saveSetting("QTtransTime", durationIndex.toString())
         
         // 保存窗口位置和大小（仅当窗口不是最大化状态时）
         if (window.visibility === Window.Windowed) {
@@ -411,301 +447,52 @@ ApplicationWindow {
         database.saveSetting("CustomAccent", customAccent.toString())
     }
 
-    // 边缘调整大小（8个方向）
-    MouseArea { height: 8; anchors { top: parent.top; left: parent.left; right: parent.right }
+    // 边缘调整大小（8个方向）- 只在窗口模式下可用
+    MouseArea { 
+        visible: !isFullscreen
+        height: 8; anchors { top: parent.top; left: parent.left; right: parent.right }
         cursorShape: Qt.SizeVerCursor; z: 100
         onPressed: function(mouse) { if (mouse.button === Qt.LeftButton) window.startSystemResize(Qt.TopEdge) }
     }
-    MouseArea { height: 8; anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
+    MouseArea { 
+        visible: !isFullscreen
+        height: 8; anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
         cursorShape: Qt.SizeVerCursor; z: 100
         onPressed: function(mouse) { if (mouse.button === Qt.LeftButton) window.startSystemResize(Qt.BottomEdge) }
     }
-    MouseArea { width: 8; anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
+    MouseArea { 
+        visible: !isFullscreen
+        width: 8; anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
         cursorShape: Qt.SizeHorCursor; z: 100
         onPressed: function(mouse) { if (mouse.button === Qt.LeftButton) window.startSystemResize(Qt.LeftEdge) }
     }
-    
-    // 导入进度对话框
-    Dialog {
-        id: importProgressDialog
-        title: "导入图片进度"
-        width: 600
-        height: 200
-        modal: true
-        anchors.centerIn: parent
-        closePolicy: Popup.NoAutoClose
-        standardButtons: Dialog.NoButton
-        
-        ColumnLayout {
-            anchors.fill: parent
-            anchors.margins: 20
-            spacing: 20
-            
-            // 导入信息显示
-            ColumnLayout {
-                spacing: 10
-                
-                Text {
-                    id: currentFolderText
-                    text: "正在导入到分组: 准备中..."
-                    color: Universal.foreground
-                    font.pointSize: 12
-                    horizontalAlignment: Text.AlignHCenter
-                    Layout.fillWidth: true
-                }
-                
-                Text {
-                    id: currentImageText
-                    text: "正在导入: 准备中..."
-                    color: Universal.foreground
-                    font.pointSize: 12
-                    horizontalAlignment: Text.AlignHCenter
-                    elide: Text.ElideMiddle
-                    Layout.fillWidth: true
-                }
-            }
-            
-            // 导入图片进度条
-            ProgressBar {
-                id: importProgressBar
-                Layout.fillWidth: true
-                Layout.preferredHeight: 30
-                from: 0
-                to: 100
-                value: 0
-                
-                // 添加进度条动画
-                Behavior on value {
-                    NumberAnimation {
-                        duration: 300
-                        easing.type: Easing.OutQuad
-                    }
-                }
-                
-                background: Rectangle {
-                    color: window.customBackground
-                    border.color: window.customAccent
-                    border.width: 1
-                    radius: 6
-                    
-                    // 进度填充
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        width: parent.width * (importProgressBar.value / 100)
-                        color: window.customAccent
-                        radius: 5
-                    }
-                    
-                    // 进度文本
-                    Text {
-                        id: progressText
-                        anchors.centerIn: parent
-                        text: "导入图片: 0/0 (0%)"
-                        color: Universal.foreground
-                        font.pointSize: 11
-                        z: 1
-                    }
-                }
-                
-                // 移除自定义contentItem，使用默认的contentItem但设置为透明
-                contentItem: Rectangle {
-                    color: "transparent"
-                }
-            }
-        }
-    }
-    
-    // 导出进度对话框
-    Dialog {
-        id: exportProgressDialog
-        title: "导出图片进度"
-        width: 600
-        height: 200
-        modal: true
-        anchors.centerIn: parent
-        closePolicy: Popup.NoAutoClose
-        standardButtons: Dialog.NoButton
-        
-        ColumnLayout {
-            anchors.fill: parent
-            anchors.margins: 20
-            spacing: 20
-            
-            // 导出信息显示
-            ColumnLayout {
-                spacing: 10
-                
-                Text {
-                    id: currentExportFolderText
-                    text: "正在导出到: 准备中..."
-                    color: Universal.foreground
-                    font.pointSize: 12
-                    horizontalAlignment: Text.AlignHCenter
-                    Layout.fillWidth: true
-                }
-                
-                Text {
-                    id: currentExportImageText
-                    text: "正在导出: 准备中..."
-                    color: Universal.foreground
-                    font.pointSize: 12
-                    horizontalAlignment: Text.AlignHCenter
-                    elide: Text.ElideMiddle
-                    Layout.fillWidth: true
-                }
-            }
-            
-            // 导出图片进度条
-            ProgressBar {
-                id: exportProgressBar
-                Layout.fillWidth: true
-                Layout.preferredHeight: 30
-                from: 0
-                to: 100
-                value: 0
-                
-                // 添加进度条动画
-                Behavior on value {
-                    NumberAnimation {
-                        duration: 300
-                        easing.type: Easing.OutQuad
-                    }
-                }
-                
-                background: Rectangle {
-                    color: window.customBackground
-                    border.color: window.customAccent
-                    border.width: 1
-                    radius: 6
-                    
-                    // 进度填充
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        width: parent.width * (exportProgressBar.value / 100)
-                        color: window.customAccent
-                        radius: 5
-                    }
-                    
-                    // 进度文本
-                    Text {
-                        id: exportProgressText
-                        anchors.centerIn: parent
-                        text: "导出图片: 0/0 (0%)"
-                        color: Universal.foreground
-                        font.pointSize: 11
-                        z: 1
-                    }
-                }
-                
-                // 移除自定义contentItem，使用默认的contentItem但设置为透明
-                contentItem: Rectangle {
-                    color: "transparent"
-                }
-            }
-        }
-    }
-    
-    
-    
-    // 连接database的异步导入和导出信号
-    Connections {
-        target: database
-        
-        // 处理导入进度更新
-        function onImportProgress(current, total, currentFile, currentFolder) {
-            let progress = (current / total) * 100
-            importProgressBar.value = progress
-            progressText.text = "导入图片: " + current + "/" + total + " (" + Math.round(progress) + "%)"
-            currentImageText.text = "正在导入: " + currentFile
-            currentFolderText.text = "正在导入到分组: " + currentFolder
-        }
-        
-        // 处理导入完成
-        function onImportFinished(success, importedCount, totalCount) {
-            importProgressDialog.close()
-            console.log("图片导入完成，共导入" + importedCount + "/" + totalCount + "张图片")
-            
-            // 重置进度条值，确保下次打开时没有回退动画
-            importProgressBar.value = 0
-            progressText.text = "导入图片: 0/0 (0%)"
-            currentImageText.text = "正在导入: 准备中..."
-            currentFolderText.text = "正在导入到分组: 准备中..."
-            
-            // 首先，确保分组树已经完全加载
-            groupTree.loadGroups();
-        }
-        
-        // 处理导入错误
-        function onImportError(error) {
-            console.error("导入错误: " + error)
-            importProgressDialog.close()
-            
-            // 重置进度条值，确保下次打开时没有回退动画
-            importProgressBar.value = 0
-            progressText.text = "导入图片: 0/0 (0%)"
-            currentImageText.text = "正在导入: 准备中..."
-            currentFolderText.text = "正在导入到分组: 准备中..."
-        }
-        
-        // 处理导出进度更新
-        function onExportProgress(current, total, currentFile, targetFolder) {
-            let progress = (current / total) * 100
-            exportProgressBar.value = progress
-            exportProgressText.text = "导出图片: " + current + "/" + total + " (" + Math.round(progress) + "%)"
-            currentExportImageText.text = "正在导出: " + currentFile
-            currentExportFolderText.text = "正在导出到: " + targetFolder
-        }
-        
-        // 处理导出完成
-        function onExportFinished(success, exportedCount, totalCount, targetFolder) {
-            exportProgressDialog.close()
-            
-            // 重置进度条值，确保下次打开时没有回退动画
-            exportProgressBar.value = 0
-            exportProgressText.text = "导出图片: 0/0 (0%)"
-            currentExportImageText.text = "正在导出: 准备中..."
-            currentExportFolderText.text = "正在导出到: 准备中..."
-            
-            // 显示导出完成提示
-            showInfoDialog("导出完成", "成功导出 " + exportedCount + "/" + totalCount + " 张图片到文件夹: " + targetFolder)
-        }
-        
-        // 处理导出错误
-        function onExportError(error) {
-            console.error("导出错误: " + error)
-            exportProgressDialog.close()
-            
-            // 重置进度条值，确保下次打开时没有回退动画
-            exportProgressBar.value = 0
-            exportProgressText.text = "导出图片: 0/0 (0%)"
-            currentExportImageText.text = "正在导出: 准备中..."
-            currentExportFolderText.text = "正在导出到: 准备中..."
-            
-            // 显示导出错误提示
-            showInfoDialog("导出错误", "导出过程中发生错误: " + error)
-        }
-    }
-    MouseArea { width: 8; anchors { right: parent.right; top: parent.top; bottom: parent.bottom }
+    MouseArea { 
+        visible: !isFullscreen
+        width: 8; anchors { right: parent.right; top: parent.top; bottom: parent.bottom }
         cursorShape: Qt.SizeHorCursor; z: 100
         onPressed: function(mouse) { if (mouse.button === Qt.LeftButton) window.startSystemResize(Qt.RightEdge) }
     }
-    MouseArea { width: 8; height: 8; anchors { top: parent.top; left: parent.left }
+    MouseArea { 
+        visible: !isFullscreen
+        width: 8; height: 8; anchors { top: parent.top; left: parent.left }
         cursorShape: Qt.SizeFDiagCursor; z: 100
         onPressed: function(mouse) { if (mouse.button === Qt.LeftButton) window.startSystemResize(Qt.TopEdge | Qt.LeftEdge) }
     }
-    MouseArea { width: 8; height: 8; anchors { top: parent.top; right: parent.right }
+    MouseArea { 
+        visible: !isFullscreen
+        width: 8; height: 8; anchors { top: parent.top; right: parent.right }
         cursorShape: Qt.SizeBDiagCursor; z: 100
         onPressed: function(mouse) { if (mouse.button === Qt.LeftButton) window.startSystemResize(Qt.TopEdge | Qt.RightEdge) }
     }
-    MouseArea { width: 8; height: 8; anchors { bottom: parent.bottom; left: parent.left }
+    MouseArea { 
+        visible: !isFullscreen
+        width: 8; height: 8; anchors { bottom: parent.bottom; left: parent.left }
         cursorShape: Qt.SizeBDiagCursor; z: 100
         onPressed: function(mouse) { if (mouse.button === Qt.LeftButton) window.startSystemResize(Qt.BottomEdge | Qt.LeftEdge) }
     }
-    MouseArea { width: 8; height: 8; anchors { bottom: parent.bottom; right: parent.right }
+    MouseArea { 
+        visible: !isFullscreen
+        width: 8; height: 8; anchors { bottom: parent.bottom; right: parent.right }
         cursorShape: Qt.SizeFDiagCursor; z: 100
         onPressed: function(mouse) { if (mouse.button === Qt.LeftButton) window.startSystemResize(Qt.BottomEdge | Qt.RightEdge) }
     }
@@ -715,14 +502,13 @@ ApplicationWindow {
         anchors.fill: parent
         color: Universal.theme === Universal.Dark ? window.customBackground : window.customAccent
         border.color: window.customAccent
-        border.width: 1
+        border.width: isFullscreen ? 0 : 1  // 全屏时不显示边框
+        radius: isFullscreen ? 0 : 12  // 全屏时无圆角
         
-        // 🔑 设置圆角
-        radius: 12
-        
-        // 标题栏
+        // 标题栏 - 窗口模式下显示，全屏模式下隐藏
         Rectangle {
             id: customTitleBar
+            visible: !window.isFullscreen
             height: 36
             color: window.customBackground
             anchors { top: parent.top; left: parent.left; right: parent.right }
@@ -832,9 +618,10 @@ ApplicationWindow {
             }
         }
         
-        // 工具栏
+        // 工具栏 - 窗口模式下显示
         Frame {
             id: toolbar
+            visible: !window.isFullscreen
             anchors.top: customTitleBar.bottom
             anchors.left: parent.left; anchors.right: parent.right
             anchors.topMargin: 1
@@ -933,14 +720,10 @@ ApplicationWindow {
                         Layout.preferredWidth: 80
                         Layout.preferredHeight: 28
                         ToolTip.visible: hovered
-                        ToolTip.text: "进入全屏浏览，或者双击图片显示区域进入全屏，并可以幻灯片播放。上下键切换图片，左右键缩放，ESC退出全屏。"
+                        ToolTip.text: "进入全屏浏览（窗口最大化），或者双击图片显示区域进入全屏，并可以幻灯片播放。上下键切换图片，左右键缩放，ESC退出全屏。"
                         ToolTip.delay: 500
                         onClicked: {
-                            if (imageViewer.currentImageId !== -1) {
-                                fullScreenWindow.show()
-                                fullScreenWindow.raise()
-                                fullScreenWindow.requestActivate()
-                            }
+                            window.enterFullscreen()
                         }
                     }
 
@@ -965,15 +748,14 @@ ApplicationWindow {
                                "电影卷轴（着色器）", "DNA双螺旋（着色器）", "极坐标映射（着色器）",
                                "幕布闭合（着色器）", "霓虹灯（着色器）", "传送门（着色器）", "粒子重组（着色器）", "黑白颜色过渡（着色器）",
                                "球体映射（着色器）", "棱镜折射（着色器）", "螺旋变形（着色器）", "马赛克旋转（着色器）", "液态融合（着色器）"]
-                        currentIndex: window.sharedTransitionIndex
+                        currentIndex: window.transitionIndex
 
                         popup {
                             height: 380
                         }
 
                         onActivated: function(index) {
-                            // 用户选择时更新共享属性，会自动触发onSharedTransitionIndexChanged
-                            window.sharedTransitionIndex = index
+                            window.transitionIndex = index
                         }
                     }
 
@@ -982,11 +764,10 @@ ApplicationWindow {
                         Layout.preferredWidth: 120
                         Layout.alignment: Qt.AlignVCenter
                         model: ["无过渡", "0.5秒", "1秒", "1.5秒", "2秒", "3秒", "4秒", "5秒", "6秒", "7秒", "8秒"]
-                        currentIndex: window.sharedDurationIndex
+                        currentIndex: window.durationIndex
 
                         onActivated: function(index) {
-                            // 用户选择时更新共享属性，会自动触发onSharedDurationIndexChanged
-                            window.sharedDurationIndex = index
+                            window.durationIndex = index
                         }
                     }
 
@@ -1001,160 +782,426 @@ ApplicationWindow {
             }
         }
         
-        // 重新实现可拖拽分隔条：使用基本的SplitView组件
-        SplitView {
-            id: splitView
-            anchors.top: toolbar.bottom
+        // 主内容区域 - 根据全屏状态调整
+        Rectangle {
+            id: mainContent
+            anchors.top: window.isFullscreen ? parent.top : toolbar.bottom
             anchors.bottom: parent.bottom
-            anchors.left: parent.left; anchors.right: parent.right
-            anchors.topMargin: 1
-            anchors.leftMargin: 8
-            anchors.rightMargin: 8
-            anchors.bottomMargin: 8
-            width: parent.width - 2 * 8
-            orientation: Qt.Horizontal
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.topMargin: window.isFullscreen ? 0 : 1
+            anchors.leftMargin: window.isFullscreen ? 0 : 8
+            anchors.rightMargin: window.isFullscreen ? 0 : 8
+            anchors.bottomMargin: window.isFullscreen ? 0 : 8
+            color: window.customBackground
             
-            // 自定义分隔条样式，匹配主题
-            handle: Rectangle {
-                implicitWidth: 6
-                color: customBackground
+            // SplitView - 窗口模式下显示分组树、图片列表和查看器
+            SplitView {
+                id: splitView
+                visible: !window.isFullscreen
+                anchors.fill: parent
+                orientation: Qt.Horizontal
                 
-                MouseArea {
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.SizeHorCursor
+                // 自定义分隔条样式
+                handle: Rectangle {
+                    implicitWidth: 6
+                    color: customBackground
                     
-                    onEntered: parent.color = window.customAccent
-                    onExited: parent.color = window.customBackground
-                }
-            }
-            
-            // 左侧面板：分组树
-            Rectangle {
-                id: groupTreeContainer
-                SplitView.minimumWidth: 200
-                SplitView.preferredWidth: 200
-                SplitView.maximumWidth: 600
-                color: window.customBackground
-                border.color: window.customAccent
-                border.width: 0
-                
-                // 使用GroupTree组件实现分组树
-                GroupTree {
-                    id: groupTree
-                    anchors.fill: parent
-                    customBackground: window.customBackground
-                    customAccent: window.customAccent
-                    
-                    // 处理分组选择信号
-                    onGroupSelected: {
-                        // 保存当前选中的分组ID
-                        currentGroupId = groupId
-                        console.log("Group selected: " + groupId)
+                    MouseArea {
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.SizeHorCursor
                         
-                        // 更新标题栏信息
-                        groupPath = getFullGroupPath(groupId)
-                        console.log("Updated group path: " + groupPath)
-                        
-                        imageCount = updateImageCount(groupId)
-                        console.log("Updated image count: " + imageCount)
-                        
-                        // 选择分组后刷新图片列表，只显示该分组下的图片
-                        // 注意：loadImages函数会自动选中第一张图片并发送imageSelected信号
-                        // imageSelected信号处理函数会更新currentImageInfo，所以这里不需要清空
-                        imageList.loadImages(groupId)
-                    }
-                    
-                    // 分组树加载完成后初始化标题栏信息
-                    Component.onCompleted: {
-                        initializeTitleBarInfo()
-                    }
-                    
-                    // 处理右键点击信号
-                    onGroupRightClicked: {
-                        // 保存上下文信息
-                        contextMenuGroupId = groupId
-                        contextMenuGroupName = groupName
-                        // 显示右键菜单
-                        groupContextMenu.popup()
+                        onEntered: parent.color = window.customAccent
+                        onExited: parent.color = window.customBackground
                     }
                 }
+                
+                // 左侧面板：分组树
+                Rectangle {
+                    id: groupTreeContainer
+                    SplitView.minimumWidth: 150
+                    SplitView.preferredWidth: 200
+                    SplitView.maximumWidth: 400
+                    color: window.customBackground
+                    border.color: window.customAccent
+                    border.width: 0
+                    
+                    GroupTree {
+                        id: groupTree
+                        anchors.fill: parent
+                        customBackground: window.customBackground
+                        customAccent: window.customAccent
+                        
+                        onGroupSelected: {
+                            currentGroupId = groupId
+                            groupPath = getFullGroupPath(groupId)
+                            imageCount = updateImageCount(groupId)
+                            window.currentImageId = -1
+                            imageList.loadImages(groupId)
+                        }
+                        
+                        Component.onCompleted: {
+                            initializeTitleBarInfo()
+                        }
+                        
+                        onGroupRightClicked: {
+                            contextMenuGroupId = groupId
+                            contextMenuGroupName = groupName
+                            groupContextMenu.popup()
+                        }
+                    }
+                }
+                
+                // 中间面板：图片列表
+                Rectangle {
+                    id: imageListContainer
+                    SplitView.minimumWidth: 150
+                    SplitView.preferredWidth: 200
+                    SplitView.maximumWidth: 400
+                    color: window.customBackground
+                    border.color: window.customAccent
+                    border.width: 0
+                    
+                    ImageList {
+                        id: imageList
+                        anchors.fill: parent
+                        anchors.margins: 1
+                        customBackground: window.customBackground
+                        customAccent: window.customAccent
+                        onImageSelected: function(imageId) {
+                            window.currentImageId = imageId
+                            currentImageInfo = getCurrentImageInfo(imageId)
+                        }
+                        onImageRightClicked: function(imageId, filename, action) {
+                            if (action === "rename") {
+                                renameDialog.title = "重命名图片文件"
+                                renameDialog.selectedGroupId = imageId
+                                renameDialog.initialText = filename
+                                renameDialog.isForImage = true
+                                renameDialog.open()
+                            } else if (action === "delete") {
+                                confirmDeleteDialog.deleteType = "image"
+                                confirmDeleteDialog.itemId = imageId
+                                confirmDeleteDialog.itemName = filename
+                                confirmDeleteDialog.open()
+                            } else if (action === "move") {
+                                groupDialog.dialogMode = "moveImage"
+                                groupDialog.imageToMoveId = imageId
+                                groupDialog.open()
+                            }
+                        }
+                    }
+                }
+                
+                // 右侧面板：图片查看器
+                Rectangle {
+                    id: imageViewerContainer
+                    SplitView.fillWidth: true
+                    color: window.customBackground
+                    border.color: window.customAccent
+                    border.width: 0
+                    clip: true
+                    
+                    // 唯一的图片查看器实例
+                    ImageViewer {
+                        id: imageViewer
+                        anchors.fill: parent
+                        anchors.margins: 1
+                        customBackground: window.customBackground
+                        customAccent: window.customAccent
+                        currentImageId: window.currentImageId
+                        transitionType: window.transitionIndex === 0 ? -1 : window.transitionIndex - 1
+                        transitionDuration: {
+                            var durationValues = [0, 500, 1000, 1500, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
+                            return durationValues[window.durationIndex]
+                        }
 
-            }
-            
-            // 中间面板：图片列表
-            Rectangle {
-                id: imageListContainer
-                SplitView.minimumWidth: 200
-                SplitView.preferredWidth: 200
-                SplitView.maximumWidth: 800
-                color: window.customBackground
-                border.color: window.customAccent
-                border.width: 0
-                
-                ImageList {
-                    id: imageList
-                    anchors.fill: parent
-                    anchors.margins: 1
-                    customBackground: window.customBackground
-                    customAccent: window.customAccent
-                    onImageSelected: function(imageId) {
-                        imageViewer.loadImage(imageId)
-                        // 更新标题栏当前图片信息
-                        currentImageInfo = getCurrentImageInfo(imageId)
-                    }
-                    onImageRightClicked: function(imageId, filename, action) {
-                        if (action === "rename") {
-                            // 打开重命名对话框，设置为图片模式
-                            renameDialog.title = "重命名图片文件"
-                            renameDialog.selectedGroupId = imageId // 复用selectedGroupId存储图片ID
-                            renameDialog.initialText = filename // 设置初始文本
-                            renameDialog.isForImage = true // 添加图片模式标识
-                            renameDialog.open()
-                        } else if (action === "delete") {
-                            // 打开删除确认对话框
-                            confirmDeleteDialog.deleteType = "image"
-                            confirmDeleteDialog.itemId = imageId
-                            confirmDeleteDialog.itemName = filename
-                            confirmDeleteDialog.open()
-                        } else if (action === "move") {
-                            // 打开分组对话框，设置为图片调整模式
-                            groupDialog.dialogMode = "moveImage"
-                            groupDialog.imageToMoveId = imageId
-                            groupDialog.open()
+                        onImageDoubleClicked: {
+                            window.enterFullscreen()
+                        }
+                        
+                        // 当变为可见时，加载当前图片（无过渡）
+                        onVisibleChanged: {
+                            if (visible && window.currentImageId !== -1) {
+                                loadImage(window.currentImageId)
+                            }
                         }
                     }
                 }
             }
             
-            // 右侧面板：图片查看器
+            // 全屏模式下的图片查看器
+            ImageViewer {
+                id: fullscreenImageViewer
+                anchors.fill: parent
+                visible: window.isFullscreen
+                customBackground: window.customBackground
+                customAccent: window.customAccent
+                currentImageId: window.currentImageId
+                transitionType: window.transitionIndex === 0 ? -1 : window.transitionIndex - 1
+                transitionDuration: {
+                    var durationValues = [0, 500, 1000, 1500, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
+                    return durationValues[window.durationIndex]
+                }
+
+                onImageDoubleClicked: {
+                    window.exitFullscreen()
+                }
+                
+                // 当变为可见时，加载当前图片（无过渡）
+                onVisibleChanged: {
+                    if (visible && window.currentImageId !== -1) {
+                        loadImage(window.currentImageId)
+                    }
+                }
+                
+                Keys.onPressed: function(event) {
+                    if (window.isFullscreen) {
+                        switch(event.key) {
+                            case Qt.Key_Escape:
+                                window.exitFullscreen()
+                                event.accepted = true
+                                break
+                            case Qt.Key_Up:
+                                window.loadPreviousImage()
+                                event.accepted = true
+                                break
+                            case Qt.Key_Down:
+                                window.loadNextImage()
+                                event.accepted = true
+                                break
+                            case Qt.Key_Left:
+                                fullscreenImageViewer.scaleFactor *= 0.9
+                                event.accepted = true
+                                break
+                            case Qt.Key_Right:
+                                fullscreenImageViewer.scaleFactor *= 1.1
+                                event.accepted = true
+                                break
+                        }
+                    }
+                }
+            }
+            
+            // 全屏模式下鼠标跟踪和工具栏
+            MouseArea {
+                id: fullscreenMouseArea
+                visible: window.isFullscreen
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.NoButton
+                z: 0
+                
+                // 鼠标移动到顶部显示工具栏（只在工具栏宽度范围内触发）
+                onPositionChanged: {
+                    // 计算工具栏的水平范围（工具栏是水平居中的）
+                    var toolbarLeft = (parent.width - floatingToolbar.width) / 2
+                    var toolbarRight = toolbarLeft + floatingToolbar.width
+                    
+                    // 检查鼠标是否在工具栏的垂直区域（y < 60）且水平范围内
+                    var inToolbarArea = mouseY < 60 && mouseX >= toolbarLeft && mouseX <= toolbarRight
+                    
+                    if (!window.toolbarVisible && inToolbarArea) {
+                        window.toolbarVisible = true
+                        hideToolbarTimer.stop()
+                    } else if (window.toolbarVisible && mouseY > 60 && !window.anyPopupOpen) {
+                        hideToolbarTimer.start()
+                    }
+                }
+                
+                // 鼠标滚轮缩放
+                onWheel: function(event) {
+                    var scaleDelta = event.angleDelta.y > 0 ? 0.9 : 1.1
+                    fullscreenImageViewer.scaleFactor *= scaleDelta
+                    event.accepted = true
+                }
+            }
+            
+            // 全屏浮动工具栏
             Rectangle {
-                id: imageViewerParent
-                SplitView.fillWidth: true
+                id: floatingToolbar
+                visible: window.isFullscreen
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: fsToolBarLayout.width + 40
+                height: 50
                 color: window.customBackground
                 border.color: window.customAccent
-                border.width: 0
+                border.width: 1
+                radius: 8
+                z: 10
+                opacity: window.toolbarVisible ? 1.0 : 0.15
+                y: window.toolbarVisible ? 0 : -40
 
-                ImageViewer {
-                    id: imageViewer
-                    anchors.fill: parent
-                    anchors.margins: 1
-                    customBackground: window.customBackground
-                    customAccent: window.customAccent
-                    // 绑定到共享属性
-                    transitionType: window.sharedTransitionIndex === 0 ? -1 : window.sharedTransitionIndex - 1
-                    transitionDuration: {
-                        var durationValues = [0, 500, 1000, 1500, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
-                        return durationValues[window.sharedDurationIndex]
+                Behavior on y {
+                    NumberAnimation { duration: 300; easing.type: Easing.InOutQuad }
+                }
+                Behavior on opacity {
+                    NumberAnimation { duration: 200 }
+                }
+
+                // 隐藏延迟定时器
+                Timer {
+                    id: hideToolbarTimer
+                    interval: 3000
+                    onTriggered: window.toolbarVisible = false
+                }
+
+                RowLayout {
+                    id: fsToolBarLayout
+                    anchors.centerIn: parent
+                    spacing: 10
+
+                    // 工具栏按钮
+                    component ToolBarButton: ThemeColorButton {
                     }
 
-                    // 双击打开全屏浏览
-                    onImageDoubleClicked: {
-                        if (imageViewer.currentImageId !== -1) {
-                            fullScreenWindow.show()
-                            fullScreenWindow.raise()
-                            fullScreenWindow.requestActivate()
+                    // 工具栏ComboBox
+                    component ToolBarComboBox: StyledComboBox {
+                    }
+
+                    // 过渡效果选择
+                    ToolBarComboBox {
+                        id: fsTransitionComboBox
+                        Layout.preferredWidth: 200
+                        Layout.alignment: Qt.AlignVCenter
+                        focusPolicy: Qt.ClickFocus
+                        model: ["随机",
+                               // 普通过渡效果（0-28）
+                               "淡入淡出", "向左滑动", "向右滑动", "缩放", "淡入淡出+缩放",
+                               "向左旋转90°", "向右旋转90°", "向左旋转180°", "向右旋转180°", "上滑下滑", "下滑上滑",
+                               "左下向右上", "右上向左下", "左上向右下", "右下向左上", "翻转", "反向翻转", "上下翻转", "上翻转", "缩放过渡", "对角线翻转", "反向对角线翻转", "顶端X轴翻转", "底端X轴翻转", "左侧Y轴翻转", "右侧Y轴翻转", "螺旋飞出飞入", "Y轴翻转2圈", "X轴翻转2圈",
+                               // 着色器过渡效果（29-76）
+                               "溶解（着色器）", "马赛克（着色器）", "水波扭曲（着色器）", "从左向右擦除（着色器）", "从右向左擦除（着色器）",
+                               "从上向下擦除（着色器）", "从下向上擦除（着色器）", "X轴窗帘（着色器）", "Y轴窗帘（着色器）", "故障艺术（着色器）",
+                               "旋转效果（着色器）", "拉伸效果（着色器）", "百叶窗效果（着色器）", "扭曲呼吸（着色器）", "涟漪扩散（着色器）",
+                               "鱼眼（着色器）", "切片（着色器）", "反色（着色器）", "模糊渐变（着色器）", "破碎（着色器）",
+                               "雷达扫描（着色器）", "万花筒（着色器）", "火焰燃烧（着色器）", "水墨晕染（着色器）",
+                               "粒子爆炸（着色器）", "极光流动（着色器）", "赛博朋克故障（着色器）", "黑洞吞噬（着色器）",
+                               "全息投影（着色器）", "网格块（着色器）", "液体变形（着色器）", "像素化（着色器）",
+                               "纸张撕裂（着色器）", "磁性吸附（着色器）", "玻璃破碎（着色器）",
+                               "电影卷轴（着色器）", "DNA双螺旋（着色器）", "极坐标映射（着色器）",
+                               "幕布闭合（着色器）", "霓虹灯（着色器）", "传送门（着色器）", "粒子重组（着色器）", "黑白颜色过渡（着色器）",
+                               "球体映射（着色器）", "棱镜折射（着色器）", "螺旋变形（着色器）", "马赛克旋转（着色器）", "液态融合（着色器）"]
+                        currentIndex: window.transitionIndex
+
+                        onActivated: function(index) {
+                            window.transitionIndex = index
                         }
+
+                        popup.onOpened: {
+                            window.anyPopupOpen = true
+                            hideToolbarTimer.stop()
+                        }
+                        popup.onClosed: {
+                            window.anyPopupOpen = false
+                            fullscreenImageViewer.forceActiveFocus()
+                            hideToolbarTimer.start()
+                        }
+                    }
+
+                    // 过渡时间选择
+                    ToolBarComboBox {
+                        id: fsDurationComboBox
+                        Layout.preferredWidth: 120
+                        Layout.alignment: Qt.AlignVCenter
+                        focusPolicy: Qt.ClickFocus
+                        model: ["无过渡", "0.5秒", "1秒", "1.5秒", "2秒", "3秒", "4秒", "5秒", "6秒", "7秒", "8秒"]
+                        currentIndex: window.durationIndex
+
+                        onActivated: function(index) {
+                            window.durationIndex = index
+                        }
+
+                        popup.onOpened: {
+                            window.anyPopupOpen = true
+                            hideToolbarTimer.stop()
+                        }
+                        popup.onClosed: {
+                            window.anyPopupOpen = false
+                            fullscreenImageViewer.forceActiveFocus()
+                            hideToolbarTimer.start()
+                        }
+                    }
+
+                    // 上一张按钮
+                    ToolBarButton {
+                        text: "上一张"
+                        Layout.preferredWidth: 80
+                        onClicked: {
+                            window.loadPreviousImage()
+                            fullscreenImageViewer.forceActiveFocus()
+                        }
+                    }
+
+                    // 下一张按钮
+                    ToolBarButton {
+                        text: "下一张"
+                        Layout.preferredWidth: 80
+                        onClicked: {
+                            window.loadNextImage()
+                            fullscreenImageViewer.forceActiveFocus()
+                        }
+                    }
+
+                    // 幻灯片播放按钮
+                    ToolBarButton {
+                        id: slideshowButton
+                        text: "幻灯片"
+                        Layout.preferredWidth: 80
+                        // 根据幻灯片状态改变背景色
+                        background: Rectangle {
+                            color: window.slideshowActive ? window.customAccent : window.customBackground
+                            border.color: window.customAccent
+                            border.width: 1
+                            radius: 4
+                        }
+
+                        onClicked: {
+                            window.slideshowActive = !window.slideshowActive
+                            if (window.slideshowActive) {
+                                slideshowTimer.start()
+                            } else {
+                                slideshowTimer.stop()
+                            }
+                            fullscreenImageViewer.forceActiveFocus()
+                        }
+                    }
+
+                    // 幻灯片间隔时间选择
+                    ToolBarComboBox {
+                        id: fsSlideshowIntervalComboBox
+                        Layout.preferredWidth: 100
+                        Layout.alignment: Qt.AlignVCenter
+                        focusPolicy: Qt.ClickFocus
+                        model: ["3秒", "4秒", "5秒", "6秒", "7秒", "8秒", "9秒", "10秒"]
+                        currentIndex: 0  // 默认3秒
+
+                        onActivated: function(index) {
+                            var intervalValues = [3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000]
+                            window.slideshowInterval = intervalValues[index]
+                            // 如果正在播放，重启定时器以应用新间隔
+                            if (window.slideshowActive) {
+                                slideshowTimer.restart()
+                            }
+                        }
+
+                        popup.onOpened: {
+                            window.anyPopupOpen = true
+                            hideToolbarTimer.stop()
+                        }
+                        popup.onClosed: {
+                            window.anyPopupOpen = false
+                            fullscreenImageViewer.forceActiveFocus()
+                            hideToolbarTimer.start()
+                        }
+                    }
+
+                    // 退出全屏按钮
+                    ToolBarButton {
+                        text: "退出全屏"
+                        Layout.preferredWidth: 100
+                        onClicked: window.exitFullscreen()
                     }
                 }
             }
@@ -1166,7 +1213,7 @@ ApplicationWindow {
         id: groupDialog
         title: dialogMode === "moveGroup" ? "调整分组到目标分组" : dialogMode === "moveImage" ? "调整图片到指定分组" : dialogMode === "createGroup" ? "创建新分组" : "选择或创建分组"
         width: 480
-        height: 500 // 调整为更紧凑的尺寸
+        height: 500
         modal: true
         anchors.centerIn: parent
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideOfArea
@@ -1239,7 +1286,7 @@ ApplicationWindow {
             GroupTree {
                 id: dialogGroupTree
                 Layout.fillWidth: true
-                Layout.fillHeight: true // 让GroupTree填充剩余的高度
+                Layout.fillHeight: true
                 customBackground: window.customBackground
                 customAccent: window.customAccent
 
@@ -1283,7 +1330,6 @@ ApplicationWindow {
                     onClicked: {
                         let groupName = groupNameInput.text.trim()
                         if (groupName === "") {
-                            // 提示用户输入分组名称
                             console.log("请输入分组名称")
                             return
                         }
@@ -1291,19 +1337,16 @@ ApplicationWindow {
                         let parentId = groupDialog.selectedParentGroupId
                         // 处理根分组和子分组的创建逻辑
                         if (parentId === 0) {
-                            // 选择了"根分组"选项，创建新的根分组（parent_id=0）
                             console.log("Creating root group: " + groupName)
                             parentId = 0
                         } else if (parentId === -1) {
-                            // 没有选择分组或选择了"未分组"，默认创建根分组
                             console.log("Creating root group by default: " + groupName)
                             parentId = 0
                         } else {
-                            // 选择了其他分组，创建该分组下的子分组
                             console.log("Creating subgroup: " + groupName + " under parent group ID: " + parentId)
                         }
 
-                        // 调用createGroup函数，传入选中的分组ID作为父分组ID
+                        // 调用createGroup函数
                         let success = database.createGroup(groupName, parentId)
                         if (success) {
                             console.log("Group created successfully")
@@ -1345,8 +1388,6 @@ ApplicationWindow {
                 }
             }
         }
-        
-        // 使用默认的标准按钮，移除自定义按钮区域
         
         // 对话框打开时刷新分组树数据
         onOpened: {
@@ -1402,14 +1443,9 @@ ApplicationWindow {
                     return
                 }
 
-                // 2. 如果选择了"未分组"，将其设置为-1
-                if (targetGroup === -1) {
-                    console.log("=== Changed target group from -1 to -1 (ungrouped) ===")
-                }
-
-                // 3. 执行图片分组调整
+                // 2. 执行图片分组调整
                 database.updateImageGroup(imageToMove, targetGroup)
-                // 4. 重新加载图片列表
+                // 3. 重新加载图片列表
                 imageList.loadImages()
                 console.log("=== Image move completed: " + imageToMove + " -> " + targetGroup + " ===")
             } else {
@@ -1481,7 +1517,6 @@ ApplicationWindow {
     // 右键菜单
     Menu {
         id: groupContextMenu
-        // 使用默认位置，或者从事件中获取位置
 
         MenuItem {
             text: "创建新分组"
@@ -1499,7 +1534,7 @@ ApplicationWindow {
                 renameDialog.title = "重命名分组"
                 renameDialog.selectedGroupId = contextMenuGroupId
                 renameDialog.initialText = contextMenuGroupName
-                renameDialog.isForImage = false // 明确设置为分组模式
+                renameDialog.isForImage = false
                 renameDialog.open()
             }
         }
@@ -1537,7 +1572,7 @@ ApplicationWindow {
         }
     }
     
-    // 重命名对话框 - 使用标准Dialog组件
+    // 重命名对话框
     Dialog {
         id: renameDialog
         title: "重命名分组"
@@ -1638,14 +1673,12 @@ ApplicationWindow {
         }
         
         ColumnLayout {
-            // 直接使用默认布局，让Dialog组件自动管理尺寸
             spacing: 15
             width: implicitWidth
             height: implicitHeight
             
             // 消息文本
             Text {
-                // 使用函数来获取消息文本
                 text: confirmDeleteDialog.getMessage()
                 color: Universal.foreground
                 font.pointSize: 12
@@ -1687,6 +1720,257 @@ ApplicationWindow {
             groupDialog.dialogMode = "import"
             // 打开分组选择对话框
             groupDialog.open()
+        }
+    }
+    
+    // 导入进度对话框
+    Dialog {
+        id: importProgressDialog
+        title: "导入图片进度"
+        width: 600
+        height: 200
+        modal: true
+        anchors.centerIn: parent
+        closePolicy: Popup.NoAutoClose
+        standardButtons: Dialog.NoButton
+        
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 20
+            spacing: 20
+            
+            ColumnLayout {
+                spacing: 10
+                
+                Text {
+                    id: currentFolderText
+                    text: "正在导入到分组: 准备中..."
+                    color: Universal.foreground
+                    font.pointSize: 12
+                    horizontalAlignment: Text.AlignHCenter
+                    Layout.fillWidth: true
+                }
+                
+                Text {
+                    id: currentImageText
+                    text: "正在导入: 准备中..."
+                    color: Universal.foreground
+                    font.pointSize: 12
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideMiddle
+                    Layout.fillWidth: true
+                }
+            }
+            
+            ProgressBar {
+                id: importProgressBar
+                Layout.fillWidth: true
+                Layout.preferredHeight: 30
+                from: 0
+                to: 100
+                value: 0
+                
+                Behavior on value {
+                    NumberAnimation {
+                        duration: 300
+                        easing.type: Easing.OutQuad
+                    }
+                }
+                
+                background: Rectangle {
+                    color: window.customBackground
+                    border.color: window.customAccent
+                    border.width: 1
+                    radius: 6
+                    
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: parent.width * (importProgressBar.value / 100)
+                        color: window.customAccent
+                        radius: 5
+                    }
+                    
+                    Text {
+                        id: progressText
+                        anchors.centerIn: parent
+                        text: "导入图片: 0/0 (0%)"
+                        color: Universal.foreground
+                        font.pointSize: 11
+                        z: 1
+                    }
+                }
+                
+                contentItem: Rectangle {
+                    color: "transparent"
+                }
+            }
+        }
+    }
+    
+    // 导出进度对话框
+    Dialog {
+        id: exportProgressDialog
+        title: "导出图片进度"
+        width: 600
+        height: 200
+        modal: true
+        anchors.centerIn: parent
+        closePolicy: Popup.NoAutoClose
+        standardButtons: Dialog.NoButton
+        
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 20
+            spacing: 20
+            
+            ColumnLayout {
+                spacing: 10
+                
+                Text {
+                    id: currentExportFolderText
+                    text: "正在导出到: 准备中..."
+                    color: Universal.foreground
+                    font.pointSize: 12
+                    horizontalAlignment: Text.AlignHCenter
+                    Layout.fillWidth: true
+                }
+                
+                Text {
+                    id: currentExportImageText
+                    text: "正在导出: 准备中..."
+                    color: Universal.foreground
+                    font.pointSize: 12
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideMiddle
+                    Layout.fillWidth: true
+                }
+            }
+            
+            ProgressBar {
+                id: exportProgressBar
+                Layout.fillWidth: true
+                Layout.preferredHeight: 30
+                from: 0
+                to: 100
+                value: 0
+                
+                Behavior on value {
+                    NumberAnimation {
+                        duration: 300
+                        easing.type: Easing.OutQuad
+                    }
+                }
+                
+                background: Rectangle {
+                    color: window.customBackground
+                    border.color: window.customAccent
+                    border.width: 1
+                    radius: 6
+                    
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: parent.width * (exportProgressBar.value / 100)
+                        color: window.customAccent
+                        radius: 5
+                    }
+                    
+                    Text {
+                        id: exportProgressText
+                        anchors.centerIn: parent
+                        text: "导出图片: 0/0 (0%)"
+                        color: Universal.foreground
+                        font.pointSize: 11
+                        z: 1
+                    }
+                }
+                
+                contentItem: Rectangle {
+                    color: "transparent"
+                }
+            }
+        }
+    }
+    
+    // 连接database的异步导入和导出信号
+    Connections {
+        target: database
+        
+        // 处理导入进度更新
+        function onImportProgress(current, total, currentFile, currentFolder) {
+            let progress = (current / total) * 100
+            importProgressBar.value = progress
+            progressText.text = "导入图片: " + current + "/" + total + " (" + Math.round(progress) + "%)"
+            currentImageText.text = "正在导入: " + currentFile
+            currentFolderText.text = "正在导入到分组: " + currentFolder
+        }
+        
+        // 处理导入完成
+        function onImportFinished(success, importedCount, totalCount) {
+            importProgressDialog.close()
+            console.log("图片导入完成，共导入" + importedCount + "/" + totalCount + "张图片")
+            
+            // 重置进度条值
+            importProgressBar.value = 0
+            progressText.text = "导入图片: 0/0 (0%)"
+            currentImageText.text = "正在导入: 准备中..."
+            currentFolderText.text = "正在导入到分组: 准备中..."
+            
+            // 首先，确保分组树已经完全加载
+            groupTree.loadGroups();
+        }
+        
+        // 处理导入错误
+        function onImportError(error) {
+            console.error("导入错误: " + error)
+            importProgressDialog.close()
+            
+            // 重置进度条值
+            importProgressBar.value = 0
+            progressText.text = "导入图片: 0/0 (0%)"
+            currentImageText.text = "正在导入: 准备中..."
+            currentFolderText.text = "正在导入到分组: 准备中..."
+        }
+        
+        // 处理导出进度更新
+        function onExportProgress(current, total, currentFile, targetFolder) {
+            let progress = (current / total) * 100
+            exportProgressBar.value = progress
+            exportProgressText.text = "导出图片: " + current + "/" + total + " (" + Math.round(progress) + "%)"
+            currentExportImageText.text = "正在导出: " + currentFile
+            currentExportFolderText.text = "正在导出到: " + targetFolder
+        }
+        
+        // 处理导出完成
+        function onExportFinished(success, exportedCount, totalCount, targetFolder) {
+            exportProgressDialog.close()
+            
+            // 重置进度条值
+            exportProgressBar.value = 0
+            exportProgressText.text = "导出图片: 0/0 (0%)"
+            currentExportImageText.text = "正在导出: 准备中..."
+            currentExportFolderText.text = "正在导出到: 准备中..."
+            
+            // 显示导出完成提示
+            showInfoDialog("导出完成", "成功导出 " + exportedCount + "/" + totalCount + " 张图片到文件夹: " + targetFolder)
+        }
+        
+        // 处理导出错误
+        function onExportError(error) {
+            console.error("导出错误: " + error)
+            exportProgressDialog.close()
+            
+            // 重置进度条值
+            exportProgressBar.value = 0
+            exportProgressText.text = "导出图片: 0/0 (0%)"
+            currentExportImageText.text = "正在导出: 准备中..."
+            currentExportFolderText.text = "正在导出到: 准备中..."
+            
+            // 显示导出错误提示
+            showInfoDialog("导出错误", "导出过程中发生错误: " + error)
         }
     }
     
@@ -1767,449 +2051,6 @@ ApplicationWindow {
 
         onAccepted: {
             window.customAccent = selectedColor
-        }
-    }
-
-    // 全屏图片浏览窗口 - 使用独立的ImageViewer，但保持同步
-    ApplicationWindow {
-        id: fullScreenWindow
-        visible: false
-        title: "全屏浏览"
-        width: Screen.width
-        height: Screen.height
-        color: window.customBackground
-        flags: Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-
-        // 幻灯片播放属性
-        property bool slideshowActive: false
-        property int slideshowInterval: 3000  // 默认3秒
-
-        // 幻灯片定时器
-        Timer {
-            id: slideshowTimer
-            interval: fullScreenWindow.slideshowInterval
-            repeat: true
-            onTriggered: {
-                console.log("Slideshow timer triggered, active:", fullScreenWindow.slideshowActive, "list length:", fullScreenWindow.fsImageList.length)
-                if (fullScreenWindow.slideshowActive && fullScreenWindow.fsImageList.length > 0) {
-                    console.log("Loading next image for slideshow")
-                    fullScreenWindow.loadNextImage()
-                }
-            }
-        }
-
-        // 窗口显示时进入全屏模式
-        onVisibleChanged: {
-            if (visible) {
-                visibility = Window.FullScreen
-                // 重置工具栏为隐藏状态
-                toolBar.isHidden = true
-                hideToolBarTimer.stop()
-                // 暂停主窗口的动画，避免两个窗口同时播放动画导致卡顿
-                imageViewer.pauseAllAnimations()
-                // 同步当前图片到全屏
-                if (imageViewer.currentImageId !== -1) {
-                    fsImageViewer.loadImage(imageViewer.currentImageId)
-                }
-                // 同步过渡设置到全屏
-                var transitionType = window.sharedTransitionIndex === 0 ? -1 : window.sharedTransitionIndex - 1
-                var durationValues = [0, 500, 1000, 1500, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
-                var duration = durationValues[window.sharedDurationIndex]
-                fsImageViewer.transitionType = transitionType
-                fsImageViewer.transitionDuration = duration
-                // 同步全屏下拉框显示（强制刷新）
-                fsTransitionComboBox.currentIndex = window.sharedTransitionIndex
-                fsDurationComboBox.currentIndex = window.sharedDurationIndex
-                // 加载当前分组的图片列表
-                loadFSImageList()
-                Qt.callLater(function() {
-                    fsContainer.forceActiveFocus()
-                })
-            } else {
-                // 退出全屏时，停止主窗口的动画
-                imageViewer.stopAllAnimations()
-                // 停止幻灯片播放
-                fullScreenWindow.slideshowActive = false
-                slideshowTimer.stop()
-                // 同步全屏的图片到主窗口
-                if (fsImageViewer.currentImageId !== -1) {
-                    imageViewer.loadImage(fsImageViewer.currentImageId)
-                }
-                // 同步过渡设置到窗口
-                var transitionType = window.sharedTransitionIndex === 0 ? -1 : window.sharedTransitionIndex - 1
-                var durationValues = [0, 500, 1000, 1500, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
-                var duration = durationValues[window.sharedDurationIndex]
-                imageViewer.transitionType = transitionType
-                imageViewer.transitionDuration = duration
-                // 同步下拉框显示（强制刷新）
-                transitionComboBox.currentIndex = window.sharedTransitionIndex
-                durationComboBox.currentIndex = window.sharedDurationIndex
-            }
-        }
-
-        // 加载当前分组的图片列表
-        function loadFSImageList() {
-            fsImageList = []
-            if (window.currentGroupId === -1) {
-                fsImageList = database.getAllImageIds(-1)
-            } else {
-                fsImageList = database.getAllImageIds(window.currentGroupId)
-            }
-            // 找到当前图片的索引
-            for (var i = 0; i < fsImageList.length; i++) {
-                if (fsImageList[i] === fsImageViewer.currentImageId) {
-                    fsCurrentIndex = i
-                    break
-                }
-            }
-        }
-
-        // 加载上一张图片
-        function loadPreviousImage() {
-            if (fsImageList.length === 0) return
-            var newIndex = fsCurrentIndex - 1
-            if (newIndex < 0) newIndex = fsImageList.length - 1
-            fsCurrentIndex = newIndex
-            var imageId = fsImageList[newIndex]
-            fsImageViewer.loadImage(imageId)
-            // 同步到主窗口
-            imageViewer.loadImage(imageId)
-        }
-
-        // 加载下一张图片
-        function loadNextImage() {
-            if (fsImageList.length === 0) return
-            var newIndex = fsCurrentIndex + 1
-            if (newIndex >= fsImageList.length) newIndex = 0
-            fsCurrentIndex = newIndex
-            var imageId = fsImageList[newIndex]
-            fsImageViewer.loadImage(imageId)
-            // 同步到主窗口
-            imageViewer.loadImage(imageId)
-        }
-
-        property var fsImageList: []
-        property int fsCurrentIndex: 0
-
-        // 全屏背景
-        Rectangle {
-            anchors.fill: parent
-            color: window.customBackground
-
-            // 独立的ImageViewer（避免跨窗口移动组件的问题）
-            ImageViewer {
-                id: fsImageViewer
-                anchors.fill: parent
-                customBackground: window.customBackground
-                customAccent: window.customAccent
-                // 绑定到共享属性
-                transitionType: window.sharedTransitionIndex === 0 ? -1 : window.sharedTransitionIndex - 1
-                transitionDuration: {
-                    var durationValues = [0, 500, 1000, 1500, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
-                    return durationValues[window.sharedDurationIndex]
-                }
-
-                // 双击退回窗口模式
-                onImageDoubleClicked: {
-                    fullScreenWindow.close()
-                }
-            }
-
-            // 键盘事件接收器
-            Item {
-                id: fsContainer
-                anchors.fill: parent
-                focus: true
-
-                // 键盘事件处理
-                Keys.onPressed: function(event) {
-                    switch(event.key) {
-                        case Qt.Key_Escape:
-                            fullScreenWindow.close()
-                            event.accepted = true
-                            break
-                        case Qt.Key_Up:
-                            fullScreenWindow.loadPreviousImage()
-                            event.accepted = true
-                            break
-                        case Qt.Key_Down:
-                            fullScreenWindow.loadNextImage()
-                            event.accepted = true
-                            break
-                        case Qt.Key_Left:
-                            fsImageViewer.scaleFactor *= 0.9
-                            event.accepted = true
-                            break
-                        case Qt.Key_Right:
-                            fsImageViewer.scaleFactor *= 1.1
-                            event.accepted = true
-                            break
-                    }
-                }
-            }
-
-            // 全屏鼠标位置跟踪（用于工具栏显示/隐藏逻辑）
-            MouseArea {
-                id: globalMouseTracker
-                anchors.fill: parent
-                hoverEnabled: true
-                z: 0
-                // 不拦截按压事件，让下层组件处理拖拽
-                acceptedButtons: Qt.NoButton
-                
-                // 轮询定时器 - 使用 MouseArea 的 mouseX/mouseY 获取鼠标位置
-                Timer {
-                    id: toolBarPollTimer
-                    interval: 100
-                    running: !toolBar.isHidden && !toolBar.anyPopupOpen
-                    repeat: true
-                    onTriggered: {
-                        var mx = globalMouseTracker.mouseX
-                        var my = globalMouseTracker.mouseY
-                        var toolBarLeft = (parent.width - toolBar.width) / 2
-                        var toolBarRight = toolBarLeft + toolBar.width
-                        
-                        // 检测鼠标是否在工具栏显示区域
-                        var inToolBar = my >= 0 && my <= toolBar.height && mx >= toolBarLeft && mx <= toolBarRight
-                        
-                        if (inToolBar) {
-                            hideToolBarTimer.stop()
-                        } else if (!hideToolBarTimer.running) {
-                            hideToolBarTimer.start()
-                        }
-                    }
-                }
-                
-                // 鼠标移动到顶部区域时显示工具栏
-                onPositionChanged: {
-                    if (toolBar.isHidden && mouseY < 10) {
-                        var toolBarLeft = (parent.width - toolBar.width) / 2
-                        var toolBarRight = toolBarLeft + toolBar.width
-                        if (mouseX >= toolBarLeft && mouseX <= toolBarRight) {
-                            toolBar.isHidden = false
-                            hideToolBarTimer.stop()
-                        }
-                    }
-                }
-                
-                // 点击空白区域隐藏工具栏
-                onClicked: {
-                    if (!toolBar.isHidden) {
-                        var toolBarLeft = (parent.width - toolBar.width) / 2
-                        var toolBarRight = toolBarLeft + toolBar.width
-                        if (mouseY > toolBar.height || mouseX < toolBarLeft || mouseX > toolBarRight) {
-                            toolBar.isHidden = true
-                        }
-                    }
-                }
-            }
-
-            // 工具栏
-            Rectangle {
-                id: toolBar
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: fsToolBarLayout.width + 40
-                height: 50
-                color: window.customBackground
-                border.color: window.customAccent
-                border.width: 1
-                radius: 8
-                z: 10
-
-                property bool isHidden: true
-                y: isHidden ? -45 : 0
-
-                Behavior on y {
-                    NumberAnimation { duration: 300; easing.type: Easing.InOutQuad }
-                }
-
-                property bool anyPopupOpen: false
-
-                // 隐藏延迟定时器
-                Timer {
-                    id: hideToolBarTimer
-                    interval: 3000
-                    onTriggered: toolBar.isHidden = true
-                }
-
-                RowLayout {
-                    id: fsToolBarLayout
-                    anchors.centerIn: parent
-                    spacing: 10
-
-                    // 工具栏按钮
-                    component ToolBarButton: ThemeColorButton {
-                    }
-
-                    // 工具栏ComboBox
-                    component ToolBarComboBox: StyledComboBox {
-                    }
-
-                        // 过渡效果选择
-                        ToolBarComboBox {
-                            id: fsTransitionComboBox
-                            Layout.preferredWidth: 200
-                            Layout.alignment: Qt.AlignVCenter
-                            focusPolicy: Qt.ClickFocus
-                            model: ["随机",
-                                   // 普通过渡效果（0-28）
-                                   "淡入淡出", "向左滑动", "向右滑动", "缩放", "淡入淡出+缩放",
-                                   "向左旋转90°", "向右旋转90°", "向左旋转180°", "向右旋转180°", "上滑下滑", "下滑上滑",
-                                   "左下向右上", "右上向左下", "左上向右下", "右下向左上", "翻转", "反向翻转", "上下翻转", "上翻转", "缩放过渡", "对角线翻转", "反向对角线翻转", "顶端X轴翻转", "底端X轴翻转", "左侧Y轴翻转", "右侧Y轴翻转", "螺旋飞出飞入", "Y轴翻转2圈", "X轴翻转2圈",
-                                   // 着色器过渡效果（29-76）
-                                   "溶解（着色器）", "马赛克（着色器）", "水波扭曲（着色器）", "从左向右擦除（着色器）", "从右向左擦除（着色器）",
-                                   "从上向下擦除（着色器）", "从下向上擦除（着色器）", "X轴窗帘（着色器）", "Y轴窗帘（着色器）", "故障艺术（着色器）",
-                                   "旋转效果（着色器）", "拉伸效果（着色器）", "百叶窗效果（着色器）", "扭曲呼吸（着色器）", "涟漪扩散（着色器）",
-                                   "鱼眼（着色器）", "切片（着色器）", "反色（着色器）", "模糊渐变（着色器）", "破碎（着色器）",
-                                   "雷达扫描（着色器）", "万花筒（着色器）", "火焰燃烧（着色器）", "水墨晕染（着色器）",
-                                   "粒子爆炸（着色器）", "极光流动（着色器）", "赛博朋克故障（着色器）", "黑洞吞噬（着色器）",
-                                   "全息投影（着色器）", "网格块（着色器）", "液体变形（着色器）", "像素化（着色器）",
-                                   "纸张撕裂（着色器）", "磁性吸附（着色器）", "玻璃破碎（着色器）",
-                                   "电影卷轴（着色器）", "DNA双螺旋（着色器）", "极坐标映射（着色器）",
-                                   "幕布闭合（着色器）", "霓虹灯（着色器）", "传送门（着色器）", "粒子重组（着色器）", "黑白颜色过渡（着色器）",
-                                   "球体映射（着色器）", "棱镜折射（着色器）", "螺旋变形（着色器）", "马赛克旋转（着色器）", "液态融合（着色器）"]
-                            currentIndex: window.sharedTransitionIndex
-
-                            onActivated: function(index) {
-                                // 用户选择时更新共享属性，会自动触发onSharedTransitionIndexChanged
-                                window.sharedTransitionIndex = index
-                            }
-
-                            popup.onOpened: {
-                                toolBar.anyPopupOpen = true
-                                hideToolBarTimer.stop()
-                            }
-                            popup.onClosed: {
-                                toolBar.anyPopupOpen = false
-                                fsContainer.forceActiveFocus()
-                                // 弹出菜单关闭后，启动隐藏定时器
-                                hideToolBarTimer.start()
-                            }
-                        }
-
-                        // 过渡时间选择
-                        ToolBarComboBox {
-                            id: fsDurationComboBox
-                            Layout.preferredWidth: 120
-                            Layout.alignment: Qt.AlignVCenter
-                            focusPolicy: Qt.ClickFocus
-                            model: ["无过渡", "0.5秒", "1秒", "1.5秒", "2秒", "3秒", "4秒", "5秒", "6秒", "7秒", "8秒"]
-                            currentIndex: window.sharedDurationIndex
-
-                            onActivated: function(index) {
-                                // 用户选择时更新共享属性，会自动触发onSharedDurationIndexChanged
-                                window.sharedDurationIndex = index
-                            }
-
-                            popup.onOpened: {
-                                toolBar.anyPopupOpen = true
-                                hideToolBarTimer.stop()
-                            }
-                            popup.onClosed: {
-                                toolBar.anyPopupOpen = false
-                                fsContainer.forceActiveFocus()
-                                // 弹出菜单关闭后，启动隐藏定时器
-                                hideToolBarTimer.start()
-                            }
-                        }
-
-                        // 上一张按钮
-                        ToolBarButton {
-                            text: "上一张"
-                            Layout.preferredWidth: 80
-                            onClicked: {
-                                fullScreenWindow.loadPreviousImage()
-                                fsContainer.forceActiveFocus()
-                            }
-                        }
-
-                        // 下一张按钮
-                        ToolBarButton {
-                            text: "下一张"
-                            Layout.preferredWidth: 80
-                            onClicked: {
-                                fullScreenWindow.loadNextImage()
-                                fsContainer.forceActiveFocus()
-                            }
-                        }
-
-                        // 幻灯片播放按钮
-                        ToolBarButton {
-                            id: slideshowButton
-                            text: "幻灯片"
-                            Layout.preferredWidth: 80
-                            // 根据幻灯片状态改变背景色
-                            background: Rectangle {
-                                color: fullScreenWindow.slideshowActive ? window.customAccent : window.customBackground
-                                border.color: window.customAccent
-                                border.width: 1
-                                radius: 4
-                            }
-
-                            onClicked: {
-                                fullScreenWindow.slideshowActive = !fullScreenWindow.slideshowActive
-                                if (fullScreenWindow.slideshowActive) {
-                                    slideshowTimer.start()
-                                } else {
-                                    slideshowTimer.stop()
-                                }
-                                fsContainer.forceActiveFocus()
-                            }
-                        }
-
-                        // 幻灯片间隔时间选择
-                        ToolBarComboBox {
-                            id: fsSlideshowIntervalComboBox
-                            Layout.preferredWidth: 100
-                            Layout.alignment: Qt.AlignVCenter
-                            focusPolicy: Qt.ClickFocus
-                            model: ["3秒", "4秒", "5秒", "6秒", "7秒", "8秒", "9秒", "10秒"]
-                            currentIndex: 0  // 默认3秒
-
-                            onActivated: function(index) {
-                                var intervalValues = [3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000]
-                                fullScreenWindow.slideshowInterval = intervalValues[index]
-                                // 如果正在播放，重启定时器以应用新间隔
-                                if (fullScreenWindow.slideshowActive) {
-                                    slideshowTimer.restart()
-                                }
-                            }
-
-                            popup.onOpened: {
-                                toolBar.anyPopupOpen = true
-                                hideToolBarTimer.stop()
-                            }
-                            popup.onClosed: {
-                                toolBar.anyPopupOpen = false
-                                fsContainer.forceActiveFocus()
-                                // 弹出菜单关闭后，启动隐藏定时器
-                                hideToolBarTimer.start()
-                            }
-                        }
-
-                        // 关闭按钮
-                        ToolBarButton {
-                            text: "关闭"
-                            Layout.preferredWidth: 80
-                            onClicked: fullScreenWindow.close()
-                        }
-                    }
-                }
-
-            // 鼠标滚轮缩放
-            MouseArea {
-                anchors.fill: parent
-                z: -1
-                onWheel: function(event) {
-                    var scaleDelta = event.angleDelta.y > 0 ? 1.1 : 0.9
-                    fsImageViewer.scaleFactor *= scaleDelta
-                    event.accepted = true
-                }
-
-                onDoubleClicked: {
-                    fsImageViewer.scaleFactor = 1.0
-                }
-            }
         }
     }
 }

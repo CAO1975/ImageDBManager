@@ -165,20 +165,60 @@ Item {
         }
     }
     
+    // 监听 currentImageId 变化，自动加载图片
+    onCurrentImageIdChanged: {
+        // 只有当ID有效且不是当前正在显示的图片时才加载
+        if (currentImageId !== -1 && currentImageId !== newImageId) {
+            // 检查currentImage的URL是否匹配当前ID
+            var expectedUrl = "image://imageprovider/" + currentImageId + "/original"
+            if (currentImage !== expectedUrl || nextImage !== expectedUrl) {
+                // 只有可见时才执行过渡动画，不可见时静默加载（不执行动画）
+                if (visible) {
+                    loadImageWithTransition(currentImageId)
+                } else {
+                    // 不可见时只更新内部状态，不执行动画
+                    currentImage = expectedUrl
+                }
+            }
+        }
+    }
+
+    // 外部调用：直接加载图片（无过渡）
     function loadImage(imageId) {
-        if (imageId === currentImageId && !transitioning) return
-        if (transitioning && imageId === newImageId) return
+        if (imageId === -1) return
         
-        // 生成图片URL，使用自定义图片提供器加载原始图片
+        // 停止所有动画和过渡
+        stopAllAnimations()
+        transitioning = false
+        
+        // 直接设置图片
+        var imageUrl = "image://imageprovider/" + imageId + "/original"
+        currentImage = imageUrl
+        currentImageItem.source = currentImage || ""
+        currentImageItem.visible = true
+        nextImageItem.visible = false
+        currentImageItem.opacity = 1.0
+        nextImageItem.opacity = 0.0
+        
+        resetTransform()
+    }
+
+    // 带过渡效果的图片加载
+    function loadImageWithTransition(imageId) {
+        if (imageId === -1) return
+        
+        // 避免重复加载正在过渡的同一图片
+        if (transitioning && newImageId === imageId) return
+        
+        // 生成图片URL
         var imageUrl = "image://imageprovider/" + imageId + "/original"
         
-        if (currentImageId === -1) {
-            currentImageId = imageId
+        // 第一次加载（直接显示，无过渡）
+        if (currentImage === null || currentImage === "") {
             currentImage = imageUrl
             currentImageItem.source = currentImage || ""
-            // 确保图片可见
             currentImageItem.visible = true
-            nextImageItem.visible = false  // 隐藏下一张图片
+            nextImageItem.visible = false
             currentImageItem.opacity = 1.0
             nextImageItem.opacity = 0.0
             resetTransform()
@@ -186,123 +226,106 @@ Item {
         }
         
         // 停止所有动画
-        fadeAnimation.stop(); slideLeftAnimation.stop(); slideRightAnimation.stop()
-        scaleAnimation.stop(); fadeScaleAnimation.stop(); rotateAnimation.stop()
-        rotateRightAnimation.stop(); rotateLeft180Animation.stop(); rotateRight180Animation.stop()
-        slideUpDownAnimation.stop(); slideDownUpAnimation.stop()
-        slideLeftDownToRightUpAnimation.stop(); slideRightUpToLeftDownAnimation.stop()
-        slideLeftUpToRightDownAnimation.stop(); slideRightDownToLeftUpAnimation.stop()
-        flipAnimation.stop(); flipReverseAnimation.stop(); flipXDownAnimation.stop(); flipXUpAnimation.stop(); flipXTopAnimation.stop(); flipXBottomAnimation.stop()
-        scaleTransitionAnimation.stop(); flipDiagonalAnimation.stop(); flipDiagonalReverseAnimation.stop(); flipYLeftAnimation.stop(); flipYRightAnimation.stop()
-        spiralFlyAnimation.stop()
+        stopAllAnimations()
         
-        // 停止着色器过渡定时器
-        updateTimer.stop();
+        // 如果正在过渡，先结束
+        if (transitioning) {
+            endTransition()
+        }
         
-        if (transitioning) endTransition()
-        
+        // 无过渡时间：直接切换
         if (transitionDuration === 0) {
-            currentImageId = imageId
             currentImage = imageUrl
             currentImageItem.source = currentImage || ""
-            // 确保图片可见
+            currentImageItem.visible = true
+            nextImageItem.visible = false
+            currentImageItem.opacity = 1.0
+            nextImageItem.opacity = 0.0
+            resetTransform()
+            return
+        }
+        
+        // 开始过渡动画
+        transitioning = true
+        nextImage = imageUrl
+        newImageId = imageId
+        
+        // 选择过渡效果
+        var selectedTransition = transitionType
+        if (selectedTransition === -1) {
+            selectedTransition = Math.floor(Math.random() * 77)
+        }
+        
+        resetTransform()
+        
+        // 重置位置和变换
+        currentImageItem.opacity = 1.0
+        currentImageItem.x = 0
+        currentImageItem.y = 0
+        currentImageItem.scale = 1.0
+        currentImageItem.rotation = 0
+        nextImageItem.x = 0
+        nextImageItem.y = 0
+        nextImageItem.scale = 1.0
+        nextImageItem.rotation = 0
+        
+        // 设置图片源
+        currentImageItem.source = currentImage || ""
+        nextImageItem.source = nextImage || ""
+        
+        // 着色器过渡
+        if (selectedTransition >= 29 && selectedTransition <= 76) {
+            nextImageItem.opacity = 1.0
+            currentImageItem.visible = true
+            nextImageItem.visible = true
+            
+            var shaderEffectIndex = selectedTransition - 29
+            shaderEffectType = shaderEffectIndex
+            shaderTransition.visible = true
+            currentImageItem.opacity = 1.0
+            nextImageItem.opacity = 1.0
+            
+            updateTimer.start()
+        } else {
+            // 普通动画过渡
+            shaderTransition.visible = false
             currentImageItem.visible = true
             nextImageItem.visible = true
             currentImageItem.opacity = 1.0
             nextImageItem.opacity = 0.0
-            resetTransform()
-            newImageId = -1
-            nextImage = null
-        } else {
-            transitioning = true
-            newImageId = imageId
-            nextImage = imageUrl
             
-            var selectedTransition = transitionType
-            if (selectedTransition === -1) {
-                // 随机选择过渡效果，范围0-76（77种效果）
-                // 0-28: 29种普通过渡效果
-                // 29-76: 48种着色器过渡效果
-                selectedTransition = Math.floor(Math.random() * 77);
-            }
-
-            resetTransform()
-
-            currentImageItem.opacity = 1.0; currentImageItem.x = 0; currentImageItem.y = 0
-            currentImageItem.scale = 1.0; currentImageItem.rotation = 0
-            nextImageItem.x = 0; nextImageItem.y = 0
-            nextImageItem.scale = 1.0; nextImageItem.rotation = 0
-
-            // 对于着色器过渡效果，需要确保两张图片都可见
-            if (selectedTransition >= 29 && selectedTransition <= 76) {
-                // 着色器过渡：29-76（48种效果）
-                nextImageItem.opacity = 1.0;
-                currentImageItem.visible = true;
-                nextImageItem.visible = true;
-            } else {
-                // 普通过渡：0-28
-                nextImageItem.opacity = 0.0;
-                nextImageItem.visible = true;  // 确保图片项可见，即使透明度为0
-            }
-
-            currentImageItem.source = currentImage || ""; nextImageItem.source = nextImage || ""
-
-            // 如果是29-76，则使用着色器过渡
-            if (selectedTransition >= 29 && selectedTransition <= 76) {
-                // 设置着色器过渡效果类型：0-47
-                var shaderEffectIndex = selectedTransition - 29;  // 映射到着色器效果索引0-47
-                shaderEffectType = shaderEffectIndex;
-                console.log("Starting shader transition: selectedTransition=", selectedTransition, "shaderEffectIndex=", shaderEffectIndex, "effectType=", shaderEffectType, "transitionProgress=", shaderEffectItem.transitionProgress)
-                // 显示着色器过渡组件，将普通图片项隐藏（但保持ShaderEffectSource可见）
-                shaderTransition.visible = true
-                currentImageItem.visible = true  // 确保源图片可见，以便ShaderEffectSource可以捕获
-                nextImageItem.visible = true   // 确保目标图片可见，以便ShaderEffectSource可以捕获
-                currentImageItem.opacity = 1.0  // 保持不透明，确保ShaderEffectSource能捕获有效纹理
-                nextImageItem.opacity = 1.0   // 保持不透明，确保ShaderEffectSource能捕获有效纹理
-                
-                // 直接启动定时器来控制过渡，而不是依赖动画
-                updateTimer.start();
-                console.log("Shader transition timer started")
-            } else {
-                // 对于普通动画，确保着色器组件隐藏，图片项透明度正确
-                shaderTransition.visible = false
-                currentImageItem.visible = true
-                nextImageItem.visible = true
-                currentImageItem.opacity = 1.0
-                nextImageItem.opacity = 0.0
-                
-                switch(selectedTransition) {
-                    case 0: fadeAnimation.start(); break
-                    case 1: slideLeftAnimation.start(); break
-                    case 2: slideRightAnimation.start(); break
-                    case 3: scaleAnimation.start(); break
-                    case 4: fadeScaleAnimation.start(); break
-                    case 5: rotateAnimation.start(); break
-                    case 6: rotateRightAnimation.start(); break
-                    case 7: rotateLeft180Animation.start(); break
-                    case 8: rotateRight180Animation.start(); break
-                    case 9: slideUpDownAnimation.start(); break
-                    case 10: slideDownUpAnimation.start(); break
-                    case 11: slideLeftDownToRightUpAnimation.start(); break
-                    case 12: slideRightUpToLeftDownAnimation.start(); break
-                    case 13: slideLeftUpToRightDownAnimation.start(); break
-                    case 14: slideRightDownToLeftUpAnimation.start(); break
-                    case 15: flipAnimation.start(); break
-                    case 16: flipReverseAnimation.start(); break
-                    case 17: flipXDownAnimation.start(); break
-                    case 18: flipXUpAnimation.start(); break
-                    case 19: scaleTransitionAnimation.start(); break
-                    case 20: flipDiagonalAnimation.start(); break
-                    case 21: flipDiagonalReverseAnimation.start(); break
-                    case 22: flipXTopAnimation.start(); break
-                    case 23: flipXBottomAnimation.start(); break
-                    case 24: flipYLeftAnimation.start(); break
-                    case 25: flipYRightAnimation.start(); break
-                    case 26: spiralFlyAnimation.start(); break
-                    case 27: flipScaleAnimation.start(); break
-                    case 28: flipScaleXAnimation.start(); break
-                    default: fadeAnimation.start(); break
-                }
+            // 启动对应的动画
+            switch(selectedTransition) {
+                case 0: fadeAnimation.start(); break
+                case 1: slideLeftAnimation.start(); break
+                case 2: slideRightAnimation.start(); break
+                case 3: scaleAnimation.start(); break
+                case 4: fadeScaleAnimation.start(); break
+                case 5: rotateAnimation.start(); break
+                case 6: rotateRightAnimation.start(); break
+                case 7: rotateLeft180Animation.start(); break
+                case 8: rotateRight180Animation.start(); break
+                case 9: slideUpDownAnimation.start(); break
+                case 10: slideDownUpAnimation.start(); break
+                case 11: slideLeftDownToRightUpAnimation.start(); break
+                case 12: slideRightUpToLeftDownAnimation.start(); break
+                case 13: slideLeftUpToRightDownAnimation.start(); break
+                case 14: slideRightDownToLeftUpAnimation.start(); break
+                case 15: flipAnimation.start(); break
+                case 16: flipReverseAnimation.start(); break
+                case 17: flipXDownAnimation.start(); break
+                case 18: flipXUpAnimation.start(); break
+                case 19: scaleTransitionAnimation.start(); break
+                case 20: flipDiagonalAnimation.start(); break
+                case 21: flipDiagonalReverseAnimation.start(); break
+                case 22: flipXTopAnimation.start(); break
+                case 23: flipXBottomAnimation.start(); break
+                case 24: flipYLeftAnimation.start(); break
+                case 25: flipYRightAnimation.start(); break
+                case 26: spiralFlyAnimation.start(); break
+                case 27: flipScaleAnimation.start(); break
+                case 28: flipScaleXAnimation.start(); break
+                default: fadeAnimation.start(); break
             }
         }
     }
@@ -313,8 +336,11 @@ Item {
     
     function endTransition() {
         transitioning = false
-        currentImageId = newImageId
-        currentImage = nextImage
+        
+        // 更新当前图片（不修改currentImageId，因为它由外部绑定）
+        if (newImageId !== -1) {
+            currentImage = nextImage
+        }
         nextImage = null
         
         resetTransform()
@@ -537,7 +563,7 @@ Item {
             
             onWheel: function(event) {
                 if (!transitioning) {
-                    var scaleDelta = event.angleDelta.y > 0 ? 1.1 : 0.9
+                    var scaleDelta = event.angleDelta.y > 0 ? 0.9 : 1.1
                     scaleFactor *= scaleDelta
                     scaleFactor = Math.max(minScale, Math.min(maxScale, scaleFactor))
                     

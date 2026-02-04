@@ -35,18 +35,10 @@ Item {
 
     // 导航函数：根据滚轮方向切换图片
     function navigateWithWheel(delta) {
-        if (delta > 0) {
-            if (listView.currentIndex > 0) {
-                listView.currentIndex--
-                selectedImageId = imageModel.get(listView.currentIndex).id
-                imageSelected(selectedImageId)
-            }
-        } else if (delta < 0) {
-            if (listView.currentIndex < imageModel.count - 1) {
-                listView.currentIndex++
-                selectedImageId = imageModel.get(listView.currentIndex).id
-                imageSelected(selectedImageId)
-            }
+        if (delta > 0 && listView.currentIndex > 0) {
+            listView.currentIndex--
+        } else if (delta < 0 && listView.currentIndex < imageModel.count - 1) {
+            listView.currentIndex++
         }
     }
 
@@ -64,8 +56,21 @@ Item {
     property int selectedImageId: -1
     property int contextImageId: -1
     property string contextImageFilename: ""
+    // 暴露 currentIndex 给外部，与内部 listView 双向同步
+    property alias currentIndex: listView.currentIndex
     signal imageSelected(int imageId)
     signal imageRightClicked(int imageId, string filename, string action)
+
+    // 监听 currentIndex 变化，触发图片加载（用于键盘/滚轮/全屏切换）
+    onCurrentIndexChanged: {
+        if (currentIndex >= 0 && currentIndex < imageModel.count) {
+            var item = imageModel.get(currentIndex)
+            if (item && item.id !== undefined) {
+                selectedImageId = item.id
+                imageSelected(item.id)
+            }
+        }
+    }
 
     Component.onCompleted: loadImages()
 
@@ -73,6 +78,9 @@ Item {
 
     function loadImages(groupId) {
         currentGroupId = groupId || -1
+        // 重置选中状态，确保新分组的图片能正常加载
+        selectedImageId = -1
+        currentIndex = -1
         imageModel.clear()
         var imageIds = database.getAllImageIds(currentGroupId)
 
@@ -89,9 +97,13 @@ Item {
         }
 
         if (imageModel.count > 0) {
-            selectedImageId = imageModel.get(0).id
-            imageSelected(selectedImageId)
+            currentIndex = 0
         }
+    }
+
+    // 供外部调用获取当前图片数量
+    function imageCount() {
+        return imageModel.count
     }
     
     ListView {
@@ -111,15 +123,11 @@ Item {
                 event.accepted = true
                 if (currentIndex > 0) {
                     currentIndex--
-                    selectedImageId = imageModel.get(currentIndex).id
-                    imageSelected(selectedImageId)
                 }
             } else if (event.key === Qt.Key_Down) {
                 event.accepted = true
                 if (currentIndex < count - 1) {
                     currentIndex++
-                    selectedImageId = imageModel.get(currentIndex).id
-                    imageSelected(selectedImageId)
                 }
             }
         }
@@ -217,12 +225,11 @@ Item {
                 hoverEnabled: true
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 onClicked: {
-                    selectedImageId = model.id
-                    listView.currentIndex = index
                     if (mouse.button === Qt.LeftButton) {
-                        imageSelected(model.id)
+                        listView.currentIndex = index
                         listView.forceActiveFocus()
                     } else if (mouse.button === Qt.RightButton) {
+                        selectedImageId = model.id
                         contextImageId = model.id
                         contextImageFilename = model.filename
                         imageContextMenu.popup()
