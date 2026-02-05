@@ -1,4 +1,4 @@
-#version 450
+﻿#version 450
 
 // 输入 & 输出
 layout(location = 0) in vec2 qt_TexCoord0;
@@ -11,7 +11,7 @@ layout(std140, binding = 0) uniform buf {
     mat4 qt_Matrix;
     float qt_Opacity;
     float progress;
-    int effectType;  // 效果类型: 0=溶解, 1=马赛克, 2=水波扭曲, 3=从左向右擦除, 4=从右向左擦除, 5=从上向下擦除, 6=从下向上擦除, 7=X轴窗帘, 8=Y轴窗帘, 9=故障, 10=旋转, 11=拉伸, 12=百叶窗, 13=扭曲呼吸, 14=涟漪扩散, 15=鱼眼, 16=切片, 17=反色, 18=模糊渐变, 19=破碎, 20=雷达扫描, 21=万花筒, 22=火焰燃烧, 23=水墨晕染, 24=粒子爆炸, 25=极光流动, 26=赛博朋克故障, 27=黑洞吞噬, 28=全息投影, 29=网格块, 30=液体变形, 31=像素化, 32=纸张撕裂, 33=磁性吸附, 34=玻璃破碎, 35=电影卷轴, 36=DNA双螺旋, 37=极坐标映射, 38=幕布闭合, 39=霓虹灯, 40=传送门, 41=粒子重组, 42=黑白颜色过渡, 43=球体映射, 44=棱镜折射, 45=螺旋变形, 46=马赛克旋转, 47=液态融合
+    int effectType;  // 效果类型: 0=溶解, 1=马赛克, 2=水波扭曲, 3=从左向右擦除, 4=从右向左擦除, 5=从上向下擦除, 6=从下向上擦除, 7=X轴窗帘, 8=Y轴窗帘, 9=故障, 10=旋转, 11=横向拉伸, 12=纵向拉伸, 13=百叶窗, 14=扭曲呼吸, 15=涟漪扩散, 16=鱼眼, 17=横向切片, 18=纵向切片, 19=反色, 20=模糊渐变, 21=破碎, 22=雷达扫描, 23=万花筒, 24=火焰燃烧, 25=水墨晕染, 26=粒子爆炸, 27=极光流动, 28=赛博朋克故障, 29=黑洞吞噬, 30=全息投影, 31=网格块, 32=液体变形, 33=像素化, 34=纸张撕裂, 35=磁性吸附, 36=玻璃破碎, 37=电影卷轴, 38=DNA双螺旋, 39=极坐标映射, 40=横向幕布, 41=纵向幕布, 42=霓虹灯, 43=传送门, 44=粒子重组, 45=黑白颜色过渡, 46=球体映射, 47=棱镜折射, 48=螺旋变形, 49=马赛克旋转, 50=液态融合
     vec3 backgroundColor;  // 背景色 (RGB)
 };
 
@@ -150,12 +150,12 @@ void main() {
             break;
         }
 
-        case 11: // 拉伸效果
+        case 11: // 横向拉伸效果
         {
             vec2 center = vec2(0.5, 0.5);
             vec2 uvFromCenter = uv - center;
 
-            // 拉伸：旧图在X轴旋转，新图在X轴旋转
+            // 横向拉伸：旧图在X轴方向拉伸变窄，新图从窄变宽
             float angle = progress * 3.14159;  // 0→π
 
             // 决定显示哪张图：拉伸前半段显示旧图，后半段显示新图
@@ -177,7 +177,34 @@ void main() {
             break;
         }
 
-        case 12: // 百叶窗效果
+        case 12: // 纵向拉伸效果
+        {
+            vec2 center = vec2(0.5, 0.5);
+            vec2 uvFromCenter = uv - center;
+
+            // 纵向拉伸：旧图在Y轴方向拉伸变窄，新图从窄变宽
+            float angle = progress * 3.14159;  // 0→π
+
+            // 决定显示哪张图：拉伸前半段显示旧图，后半段显示新图
+            if (angle < 1.5708) {  // π/2
+                // 前半段：显示旧图，逐渐变窄
+                float scale = abs(cos(angle));
+                vec2 uvFrom = center + vec2(uvFromCenter.x, uvFromCenter.y * scale);
+                colorFrom = texture(from, uvFrom);
+                colorTo = colorFrom;
+                mixFactor = 0.0;
+            } else {
+                // 后半段：显示新图，从窄变宽
+                float scale = abs(cos(angle));
+                vec2 uvTo = center + vec2(uvFromCenter.x, uvFromCenter.y * scale);
+                colorFrom = texture(to, uvTo);
+                colorTo = colorFrom;
+                mixFactor = 1.0;
+            }
+            break;
+        }
+
+        case 13: // 百叶窗效果
         {
             // 百叶窗参数
             float numBlinds = 12.0;  // 百叶窗叶片数量
@@ -210,7 +237,7 @@ void main() {
             break;
         }
 
-        case 13: // 扭曲呼吸
+        case 14: // 扭曲呼吸
         {
             vec2 center = vec2(0.5, 0.5);
             vec2 uvOffset = uv - center;
@@ -277,7 +304,7 @@ void main() {
             break;
         }
 
-        case 14: // 涟漪扩散效果
+        case 15: // 涟漪扩散效果
         {
             vec2 center = vec2(0.5, 0.5);
             vec2 dir = normalize(uv - center);
@@ -298,7 +325,7 @@ void main() {
             break;
         }
 
-        case 15: // 鱼眼效果
+        case 16: // 鱼眼效果
         {
             vec2 center = vec2(0.5, 0.5);
             vec2 uvOffset = uv - center;
@@ -331,7 +358,7 @@ void main() {
             break;
         }
 
-        case 16: // 切片效果
+        case 17: // 横向切片效果
         {
             int numSlices = 20;
             float sliceHeight = 1.0 / float(numSlices);
@@ -370,7 +397,46 @@ void main() {
             break;
         }
 
-        case 17: // 反色效果
+        case 18: // 纵向切片效果
+        {
+            int numSlices = 20;
+            float sliceWidth = 1.0 / float(numSlices);
+            int sliceIndex = int(uv.x / sliceWidth);
+
+            // 每个切片在水平方向的位置 (0.0-1.0)
+            float slicePos = fract(uv.x / sliceWidth);
+
+            // 每个切片的滑动方向交替
+            float direction = mod(float(sliceIndex), 2.0) > 0.5 ? 1.0 : -1.0;
+
+            // 切片交替从不同方向开始过渡
+            float phase = mod(float(sliceIndex), 2.0);
+            float mixFactorSlice;
+
+            if (phase < 0.5) {
+                // 偶数切片：从左往右
+                mixFactorSlice = smoothstep(slicePos, slicePos + 0.1, progress);
+            } else {
+                // 奇数切片：从右往左
+                mixFactorSlice = smoothstep(1.0 - slicePos - 0.1, 1.0 - slicePos, progress);
+            }
+
+            mixFactor = mixFactorSlice;
+
+            // 旧图片滑动偏移：向上下滑动到图片外
+            float slideOffset = progress * 1.2 * direction;
+
+            // 旧图应用滑动
+            vec2 slideUV = vec2(uv.x, uv.y + slideOffset);
+            colorFrom = texture(from, slideUV);
+
+            // 新图不滑动，直接采样
+            colorTo = texture(to, uv);
+
+            break;
+        }
+
+        case 19: // 反色效果
         {
             // 计算反色
             vec4 invertedFrom = vec4(1.0 - colorFrom.rgb, colorFrom.a);
@@ -392,7 +458,7 @@ void main() {
             break;
         }
 
-        case 18: // 模糊渐变效果
+        case 20: // 模糊渐变效果
         {
             float blurAmount;
 
@@ -435,7 +501,7 @@ void main() {
             break;
         }
 
-        case 19: // 破碎效果
+        case 21: // 破碎效果
         {
             vec2 center = vec2(0.5, 0.5);
             vec2 uvOffset = uv - center;
@@ -472,7 +538,7 @@ void main() {
             break;
         }
 
-        case 20: // 雷达扫描效果
+        case 22: // 雷达扫描效果
         {
             vec2 center = vec2(0.5, 0.5);
             vec2 uvOffset = uv - center;
@@ -497,7 +563,7 @@ void main() {
             break;
         }
 
-        case 21: // 万花筒效果（扇形展开/折叠过渡）
+        case 23: // 万花筒效果（扇形展开/折叠过渡）
         {
             // 方案3：扇形展开/折叠过渡
             // 旧图 -> 扇形折叠成万花筒 -> 新图万花筒 -> 扇形展开成新图
@@ -610,7 +676,7 @@ void main() {
             break;
         }
 
-        case 22: // 火焰燃烧效果
+        case 24: // 火焰燃烧效果
         {
             vec2 center = vec2(0.5, 0.5);
             float distFromBottom = 1.0 - uv.y;  // 距离底部的距离
@@ -651,7 +717,7 @@ void main() {
             break;
         }
 
-        case 23: // 水墨晕染效果
+        case 25: // 水墨晕染效果
         {
             vec2 center = vec2(0.5, 0.5);
             float dist = distance(uv, center);
@@ -673,7 +739,7 @@ void main() {
             break;
         }
 
-        case 24: // 粒子爆炸效果
+        case 26: // 粒子爆炸效果
         {
             vec2 center = vec2(0.5, 0.5);
             vec2 uvOffset = uv - center;
@@ -729,7 +795,7 @@ void main() {
             break;
         }
 
-        case 25: // 极光流动效果
+        case 27: // 极光流动效果
         {
             vec2 center = vec2(0.5, 0.5);
             vec2 uvOffset = uv - center;
@@ -768,7 +834,7 @@ void main() {
             break;
         }
 
-        case 26: // 赛博朋克故障效果
+        case 28: // 赛博朋克故障效果
         {
             vec2 center = vec2(0.5, 0.5);
 
@@ -822,7 +888,7 @@ void main() {
             break;
         }
 
-        case 27: // 黑洞吞噬效果
+        case 29: // 黑洞吞噬效果
         {
             vec2 center = vec2(0.5, 0.5);
             vec2 uvOffset = uv - center;
@@ -878,7 +944,7 @@ void main() {
             break;
         }
 
-        case 28: // 全息投影效果
+        case 30: // 全息投影效果
         {
             vec2 center = vec2(0.5, 0.5);
 
@@ -930,7 +996,7 @@ void main() {
             break;
         }
 
-        case 29: // 网格块效果
+        case 31: // 网格块效果
         {
             // 平滑的进度曲线
             float smoothProgress = smoothstep(0.0, 1.0, progress);
@@ -996,7 +1062,7 @@ void main() {
             break;
         }
 
-        case 30: // 液体变形效果
+        case 32: // 液体变形效果
         {
             // 平滑的进度曲线，确保过渡初期和结束时更平滑
             float smoothProgress = smoothstep(0.0, 1.0, progress);
@@ -1053,7 +1119,7 @@ void main() {
             break;
         }
 
-        case 31: // 像素化效果
+        case 33: // 像素化效果
         {
             float pixelSize;
 
@@ -1080,7 +1146,7 @@ void main() {
             break;
         }
 
-        case 32: // 纸张撕裂效果
+        case 34: // 纸张撕裂效果
         {
             // 平滑的进度曲线，确保过渡初期和结束时更平滑
             float smoothProgress = smoothstep(0.0, 1.0, progress);
@@ -1140,7 +1206,7 @@ void main() {
             break;
         }
 
-        case 33: // 磁性吸附效果
+        case 35: // 磁性吸附效果
         {
             // 磁铁位置（固定点，可调整）
             vec2 magnetPos = vec2(0.8, 0.2);
@@ -1190,7 +1256,7 @@ void main() {
             break;
         }
 
-        case 34: // 玻璃破碎效果
+        case 36: // 玻璃破碎效果
         {
             vec2 center = vec2(0.5, 0.5);
             vec2 uvOffset = uv - center;
@@ -1233,7 +1299,7 @@ void main() {
             break;
         }
 
-        case 35: // 电影卷轴效果
+        case 37: // 电影卷轴效果
         {
             float rollSpeed = progress;
             float rollWidth = 0.15;
@@ -1275,7 +1341,7 @@ void main() {
             break;
         }
 
-        case 36: // DNA双螺旋效果
+        case 38: // DNA双螺旋效果
         {
             vec2 center = vec2(0.5, 0.5);
             
@@ -1329,7 +1395,7 @@ void main() {
             break;
         }
 
-        case 37: // 极坐标映射效果
+        case 39: // 极坐标映射效果
         {
             vec2 center = vec2(0.5, 0.5);
             vec2 uvOffset = uv - center;
@@ -1361,7 +1427,7 @@ void main() {
             break;
         }
 
-        case 38: // 幕布闭合效果
+        case 40: // 横向幕布效果
         {
             // 幕布角度：0到90度（π/2）
             float curtainAngle = progress * 1.5708;
@@ -1434,7 +1500,80 @@ void main() {
             break;
         }
 
-        case 39: // 霓虹灯效果
+        case 41: // 纵向幕布效果
+        {
+            // 幕布角度：0到90度（π/2）
+            float curtainAngle = progress * 1.5708;
+
+            // 判断当前像素在上幕布还是下幕布区域
+            bool isTopCurtain = (uv.y < 0.5);
+            bool isBottomCurtain = (uv.y >= 0.5);
+
+            if (isTopCurtain) {
+                // 上幕布：从上侧向中间闭合，旧图被拉伸
+                // 将UV坐标转换到幕布的局部坐标系
+                float localY = (0.5 - uv.y) * 2.0;  // [0, 1] (从铰链向外)
+
+                // 3D透视：随角度变化，幕布的可见高度
+                float curtainVisibility = cos(curtainAngle);
+
+                // 计算采样位置（透视映射）
+                float sampleY = 0.5 - localY * 0.5 * curtainVisibility;
+
+                // 检查像素是否在可见范围内
+                if (uv.y >= 0.5 - 0.5 * curtainVisibility) {
+                    // 显示幕布的旧图（被拉伸）
+                    vec2 sampleUV = vec2(uv.x, sampleY);
+                    colorFrom = texture(from, sampleUV);
+                    colorTo = colorFrom;
+                    mixFactor = 0.0;
+
+                    // 透视光影：幕布越闭合越暗
+                    float lightFactor = 0.7 + 0.3 * curtainVisibility;
+                    colorFrom.rgb *= lightFactor;
+                    colorTo.rgb *= lightFactor;
+                } else {
+                    // 幕布外区域，显示新图
+                    colorFrom = texture(to, uv);
+                    colorTo = colorFrom;
+                    mixFactor = 1.0;
+                }
+
+            } else if (isBottomCurtain) {
+                // 下幕布：从下侧向中间闭合，旧图被拉伸
+                // 将UV坐标转换到幕布的局部坐标系
+                float localY = (uv.y - 0.5) * 2.0;  // [0, 1] (从铰链向外)
+
+                // 3D透视：随角度变化，幕布的可见高度
+                float curtainVisibility = cos(curtainAngle);
+
+                // 计算采样位置（透视映射）
+                float sampleY = 0.5 + localY * 0.5 * curtainVisibility;
+
+                // 检查像素是否在可见范围内
+                if (uv.y <= 0.5 + 0.5 * curtainVisibility) {
+                    // 显示幕布的旧图（被拉伸）
+                    vec2 sampleUV = vec2(uv.x, sampleY);
+                    colorFrom = texture(from, sampleUV);
+                    colorTo = colorFrom;
+                    mixFactor = 0.0;
+
+                    // 透视光影：幕布越闭合越暗
+                    float lightFactor = 0.7 + 0.3 * curtainVisibility;
+                    colorFrom.rgb *= lightFactor;
+                    colorTo.rgb *= lightFactor;
+                } else {
+                    // 幕布外区域，显示新图
+                    colorFrom = texture(to, uv);
+                    colorTo = colorFrom;
+                    mixFactor = 1.0;
+                }
+            }
+
+            break;
+        }
+
+        case 42: // 霓虹灯效果
         {
             // 平滑的进度曲线，确保过渡初期和结束时更平滑
             float smoothProgress = smoothstep(0.0, 1.0, progress);
@@ -1510,7 +1649,7 @@ void main() {
             break;
         }
 
-        case 40: // 传送门效果
+        case 43: // 传送门效果
         {
             vec2 center = vec2(0.5, 0.5);
             vec2 uvOffset = uv - center;
@@ -1574,7 +1713,7 @@ void main() {
             break;
         }
 
-        case 41: // 粒子重组效果
+        case 44: // 粒子重组效果
         {
             vec2 center = vec2(0.5, 0.5);
             vec2 uvOffset = uv - center;
@@ -1629,7 +1768,7 @@ void main() {
             break;
         }
 
-        case 42: // 黑白颜色过渡效果
+        case 45: // 黑白颜色过渡效果
         {
             // 计算灰度值：0.299*R + 0.587*G + 0.114*B（人眼感知权重）
             float grayFrom = dot(colorFrom.rgb, vec3(0.299, 0.587, 0.114));
@@ -1662,7 +1801,7 @@ void main() {
             break;
         }
 
-        case 43: // 球体映射效果
+        case 46: // 球体映射效果
         {
             // 将图片映射到3D球体上旋转切换
             vec2 center = vec2(0.5, 0.5);
@@ -1821,7 +1960,7 @@ void main() {
             break;
         }
 
-        case 44: // 棱镜折射效果
+        case 47: // 棱镜折射效果
         {
             // 类似透过棱镜看到的效果，色彩分离
             vec2 center = vec2(0.5, 0.5);
@@ -1873,7 +2012,7 @@ void main() {
             break;
         }
 
-        case 45: // 螺旋变形效果
+        case 48: // 螺旋变形效果
         {
             vec2 center = vec2(0.5, 0.5);
             vec2 delta = uv - center;
@@ -1914,7 +2053,7 @@ void main() {
             break;
         }
 
-        case 46: // 马赛克旋转效果
+        case 49: // 马赛克旋转效果
         {
             // 马赛克块参数
             float tileSize = 0.08;
@@ -1991,7 +2130,7 @@ void main() {
             break;
         }
 
-        case 47: // 液态融合效果
+        case 50: // 液态融合效果
         {
             // 两张图片像液体一样融合混合，带有扭曲效果
             // 使用正弦波创建液态扭曲

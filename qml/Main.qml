@@ -56,9 +56,41 @@ ApplicationWindow {
     property string groupPath: ""
     property int imageCount: 0
     property string currentImageInfo: ""
-    
+
     // 图片尺寸缓存
     property var imageSizeCache: ({})
+
+    // 过渡效果模型（共享）
+    property var transitionModel: [
+        "随机",
+        // 普通过渡效果（0-28）
+        "淡入淡出", "向左滑动", "向右滑动", "缩放", "淡入淡出+缩放",
+        "向左旋转90°", "向右旋转90°", "向左旋转180°", "向右旋转180°", "上滑下滑", "下滑上滑",
+        "左下向右上", "右上向左下", "左上向右下", "右下向左上", "翻转", "反向翻转", "上下翻转", "上翻转", "缩放过渡", "对角线翻转", "反向对角线翻转", "顶端X轴翻转", "底端X轴翻转", "左侧Y轴翻转", "右侧Y轴翻转", "螺旋飞出飞入", "Y轴翻转2圈", "X轴翻转2圈",
+        // 着色器过渡效果（29-78）
+        "溶解（着色器）", "马赛克（着色器）", "水波扭曲（着色器）", "从左向右擦除（着色器）", "从右向左擦除（着色器）",
+        "从上向下擦除（着色器）", "从下向上擦除（着色器）", "X轴窗帘（着色器）", "Y轴窗帘（着色器）", "故障艺术（着色器）",
+        "旋转效果（着色器）", "横向拉伸（着色器）", "纵向拉伸（着色器）", "百叶窗效果（着色器）", "扭曲呼吸（着色器）", "涟漪扩散（着色器）",
+        "鱼眼（着色器）", "横向切片（着色器）", "纵向切片（着色器）", "反色（着色器）", "模糊渐变（着色器）", "破碎（着色器）",
+        "雷达扫描（着色器）", "万花筒（着色器）", "火焰燃烧（着色器）", "水墨晕染（着色器）",
+        "粒子爆炸（着色器）", "极光流动（着色器）", "赛博朋克故障（着色器）", "黑洞吞噬（着色器）",
+        "全息投影（着色器）", "网格块（着色器）", "液体变形（着色器）", "像素化（着色器）",
+        "纸张撕裂（着色器）", "磁性吸附（着色器）", "玻璃破碎（着色器）",
+        "电影卷轴（着色器）", "DNA双螺旋（着色器）", "极坐标映射（着色器）",
+        "横向幕布（着色器）", "纵向幕布（着色器）", "霓虹灯（着色器）", "传送门（着色器）", "粒子重组（着色器）", "黑白颜色过渡（着色器）",
+        "球体映射（着色器）", "棱镜折射（着色器）", "螺旋变形（着色器）", "马赛克旋转（着色器）", "液态融合（着色器）"
+    ]
+
+    // 过渡时间模型（共享）
+    property var durationModel: ["无过渡", "0.5秒", "1秒", "1.5秒", "2秒", "3秒", "4秒", "5秒", "6秒", "7秒", "8秒"]
+
+    // 过渡持续时间值数组
+    property var durationValues: [0, 500, 1000, 1500, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
+
+    // 获取当前过渡持续时间
+    function getTransitionDuration() {
+        return durationValues[durationIndex]
+    }
 
     // 连接数据库的图片尺寸信号
     Connections {
@@ -143,8 +175,11 @@ ApplicationWindow {
             verticalAlignment: Text.AlignVCenter
         }
 
-        background: ThemedRectangle {
-            borderRadius: 6
+        background: Rectangle {
+            color: window.customBackground
+            border.color: window.customAccent
+            border.width: 1
+            radius: 6
         }
 
         delegate: ItemDelegate {
@@ -170,8 +205,11 @@ ApplicationWindow {
             implicitHeight: contentItem.implicitHeight
             padding: 1
 
-            background: ThemedRectangle {
-                borderRadius: 4
+            background: Rectangle {
+                color: window.customBackground
+                border.color: window.customAccent
+                border.width: 1
+                radius: 4
             }
 
             contentItem: ListView {
@@ -197,8 +235,11 @@ ApplicationWindow {
         color: root.textColor
         font.pointSize: 11
 
-        background: ThemedRectangle {
-            borderRadius: 6
+        background: Rectangle {
+            color: window.customBackground
+            border.color: window.customAccent
+            border.width: 1
+            radius: 6
         }
     }
 
@@ -222,18 +263,7 @@ ApplicationWindow {
         }
     }
 
-    // 可复用组件：主题化Rectangle
-    component ThemedRectangle: Rectangle {
-        property color bgColor: window.customBackground
-        property color accentColor: window.customAccent
-        property int borderWidth: 1
-        property real borderRadius: 8
-
-        color: bgColor
-        border.color: accentColor
-        border.width: borderWidth
-        radius: borderRadius
-    }
+                // 使用共享的 ThemedRectangle 组件
 
     // 隐藏原生标题栏，添加支持透明背景的标志
     flags: Qt.Window | Qt.FramelessWindowHint | Qt.WindowTitleHint | 
@@ -731,23 +761,7 @@ ApplicationWindow {
                         id: transitionComboBox
                         Layout.preferredWidth: 200
                         Layout.alignment: Qt.AlignVCenter
-                        model: ["随机",
-                               // 普通过渡效果（0-28）
-                               "淡入淡出", "向左滑动", "向右滑动", "缩放", "淡入淡出+缩放",
-                               "向左旋转90°", "向右旋转90°", "向左旋转180°", "向右旋转180°", "上滑下滑", "下滑上滑",
-                               "左下向右上", "右上向左下", "左上向右下", "右下向左上", "翻转", "反向翻转", "上下翻转", "上翻转", "缩放过渡", "对角线翻转", "反向对角线翻转", "顶端X轴翻转", "底端X轴翻转", "左侧Y轴翻转", "右侧Y轴翻转", "螺旋飞出飞入", "Y轴翻转2圈", "X轴翻转2圈",
-                               // 着色器过渡效果（29-76）
-                               "溶解（着色器）", "马赛克（着色器）", "水波扭曲（着色器）", "从左向右擦除（着色器）", "从右向左擦除（着色器）",
-                               "从上向下擦除（着色器）", "从下向上擦除（着色器）", "X轴窗帘（着色器）", "Y轴窗帘（着色器）", "故障艺术（着色器）",
-                               "旋转效果（着色器）", "拉伸效果（着色器）", "百叶窗效果（着色器）", "扭曲呼吸（着色器）", "涟漪扩散（着色器）",
-                               "鱼眼（着色器）", "切片（着色器）", "反色（着色器）", "模糊渐变（着色器）", "破碎（着色器）",
-                               "雷达扫描（着色器）", "万花筒（着色器）", "火焰燃烧（着色器）", "水墨晕染（着色器）",
-                               "粒子爆炸（着色器）", "极光流动（着色器）", "赛博朋克故障（着色器）", "黑洞吞噬（着色器）",
-                               "全息投影（着色器）", "网格块（着色器）", "液体变形（着色器）", "像素化（着色器）",
-                               "纸张撕裂（着色器）", "磁性吸附（着色器）", "玻璃破碎（着色器）",
-                               "电影卷轴（着色器）", "DNA双螺旋（着色器）", "极坐标映射（着色器）",
-                               "幕布闭合（着色器）", "霓虹灯（着色器）", "传送门（着色器）", "粒子重组（着色器）", "黑白颜色过渡（着色器）",
-                               "球体映射（着色器）", "棱镜折射（着色器）", "螺旋变形（着色器）", "马赛克旋转（着色器）", "液态融合（着色器）"]
+                        model: window.transitionModel
                         currentIndex: window.transitionIndex
 
                         popup {
@@ -763,7 +777,7 @@ ApplicationWindow {
                         id: durationComboBox
                         Layout.preferredWidth: 120
                         Layout.alignment: Qt.AlignVCenter
-                        model: ["无过渡", "0.5秒", "1秒", "1.5秒", "2秒", "3秒", "4秒", "5秒", "6秒", "7秒", "8秒"]
+                        model: window.durationModel
                         currentIndex: window.durationIndex
 
                         onActivated: function(index) {
@@ -912,15 +926,12 @@ ApplicationWindow {
                         customAccent: window.customAccent
                         currentImageId: window.currentImageId
                         transitionType: window.transitionIndex === 0 ? -1 : window.transitionIndex - 1
-                        transitionDuration: {
-                            var durationValues = [0, 500, 1000, 1500, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
-                            return durationValues[window.durationIndex]
-                        }
+                        transitionDuration: window.getTransitionDuration()
 
                         onImageDoubleClicked: {
                             window.enterFullscreen()
                         }
-                        
+
                         // 当变为可见时，加载当前图片（无过渡）
                         onVisibleChanged: {
                             if (visible && window.currentImageId !== -1) {
@@ -940,15 +951,12 @@ ApplicationWindow {
                 customAccent: window.customAccent
                 currentImageId: window.currentImageId
                 transitionType: window.transitionIndex === 0 ? -1 : window.transitionIndex - 1
-                transitionDuration: {
-                    var durationValues = [0, 500, 1000, 1500, 2000, 3000, 4000, 5000, 6000, 7000, 8000]
-                    return durationValues[window.durationIndex]
-                }
+                transitionDuration: window.getTransitionDuration()
 
                 onImageDoubleClicked: {
                     window.exitFullscreen()
                 }
-                
+
                 // 当变为可见时，加载当前图片（无过渡）
                 onVisibleChanged: {
                     if (visible && window.currentImageId !== -1) {
@@ -992,28 +1000,43 @@ ApplicationWindow {
                 hoverEnabled: true
                 acceptedButtons: Qt.NoButton
                 z: 0
-                
+                // 使用属性绑定同步鼠标指针状态
+                cursorShape: fullscreenImageViewer.isDragging ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+
                 // 鼠标移动到顶部显示工具栏（只在工具栏宽度范围内触发）
                 onPositionChanged: {
                     // 计算工具栏的水平范围（工具栏是水平居中的）
                     var toolbarLeft = (parent.width - floatingToolbar.width) / 2
                     var toolbarRight = toolbarLeft + floatingToolbar.width
-                    
+
                     // 检查鼠标是否在工具栏的垂直区域（y < 60）且水平范围内
                     var inToolbarArea = mouseY < 60 && mouseX >= toolbarLeft && mouseX <= toolbarRight
-                    
-                    if (!window.toolbarVisible && inToolbarArea) {
-                        window.toolbarVisible = true
+
+                    if (inToolbarArea) {
+                        // 鼠标在工具栏区域内 - 立即停止所有隐藏计时器并显示
                         hideToolbarTimer.stop()
-                    } else if (window.toolbarVisible && mouseY > 60 && !window.anyPopupOpen) {
+                        toolbarEnterDebounceTimer.stop()
+                        if (!window.toolbarVisible) {
+                            window.toolbarVisible = true
+                        }
+                    } else if (window.toolbarVisible && !window.anyPopupOpen && !hideToolbarTimer.running) {
+                        // 鼠标在工具栏区域外且没有popup打开 - 启动隐藏计时器
+                        // 注意：只有当计时器没有运行时才启动，避免重复启动
                         hideToolbarTimer.start()
                     }
                 }
-                
+
                 // 鼠标滚轮缩放
                 onWheel: function(event) {
                     var scaleDelta = event.angleDelta.y > 0 ? 0.9 : 1.1
+                    var oldScale = fullscreenImageViewer.scaleFactor
                     fullscreenImageViewer.scaleFactor *= scaleDelta
+                    fullscreenImageViewer.scaleFactor = Math.max(fullscreenImageViewer.minScale,
+                                                                  Math.min(fullscreenImageViewer.maxScale, fullscreenImageViewer.scaleFactor))
+
+                    // 如果缩放后图片小于窗口，重置偏移使其居中
+                    fullscreenImageViewer.constrainImageOffset()
+
                     event.accepted = true
                 }
             }
@@ -1047,6 +1070,19 @@ ApplicationWindow {
                     onTriggered: window.toolbarVisible = false
                 }
 
+                // 鼠标进入防抖定时器 - 防止快速进出导致的弹跳
+                Timer {
+                    id: toolbarEnterDebounceTimer
+                    interval: 100
+                    onTriggered: {
+                        // 100ms后如果鼠标仍在工具栏区域，则显示
+                        if (fullscreenMouseArea.mouseY < 60) {
+                            window.toolbarVisible = true
+                            hideToolbarTimer.stop()
+                        }
+                    }
+                }
+
                 RowLayout {
                     id: fsToolBarLayout
                     anchors.centerIn: parent
@@ -1066,23 +1102,7 @@ ApplicationWindow {
                         Layout.preferredWidth: 200
                         Layout.alignment: Qt.AlignVCenter
                         focusPolicy: Qt.ClickFocus
-                        model: ["随机",
-                               // 普通过渡效果（0-28）
-                               "淡入淡出", "向左滑动", "向右滑动", "缩放", "淡入淡出+缩放",
-                               "向左旋转90°", "向右旋转90°", "向左旋转180°", "向右旋转180°", "上滑下滑", "下滑上滑",
-                               "左下向右上", "右上向左下", "左上向右下", "右下向左上", "翻转", "反向翻转", "上下翻转", "上翻转", "缩放过渡", "对角线翻转", "反向对角线翻转", "顶端X轴翻转", "底端X轴翻转", "左侧Y轴翻转", "右侧Y轴翻转", "螺旋飞出飞入", "Y轴翻转2圈", "X轴翻转2圈",
-                               // 着色器过渡效果（29-76）
-                               "溶解（着色器）", "马赛克（着色器）", "水波扭曲（着色器）", "从左向右擦除（着色器）", "从右向左擦除（着色器）",
-                               "从上向下擦除（着色器）", "从下向上擦除（着色器）", "X轴窗帘（着色器）", "Y轴窗帘（着色器）", "故障艺术（着色器）",
-                               "旋转效果（着色器）", "拉伸效果（着色器）", "百叶窗效果（着色器）", "扭曲呼吸（着色器）", "涟漪扩散（着色器）",
-                               "鱼眼（着色器）", "切片（着色器）", "反色（着色器）", "模糊渐变（着色器）", "破碎（着色器）",
-                               "雷达扫描（着色器）", "万花筒（着色器）", "火焰燃烧（着色器）", "水墨晕染（着色器）",
-                               "粒子爆炸（着色器）", "极光流动（着色器）", "赛博朋克故障（着色器）", "黑洞吞噬（着色器）",
-                               "全息投影（着色器）", "网格块（着色器）", "液体变形（着色器）", "像素化（着色器）",
-                               "纸张撕裂（着色器）", "磁性吸附（着色器）", "玻璃破碎（着色器）",
-                               "电影卷轴（着色器）", "DNA双螺旋（着色器）", "极坐标映射（着色器）",
-                               "幕布闭合（着色器）", "霓虹灯（着色器）", "传送门（着色器）", "粒子重组（着色器）", "黑白颜色过渡（着色器）",
-                               "球体映射（着色器）", "棱镜折射（着色器）", "螺旋变形（着色器）", "马赛克旋转（着色器）", "液态融合（着色器）"]
+                        model: window.transitionModel
                         currentIndex: window.transitionIndex
 
                         onActivated: function(index) {
@@ -1106,7 +1126,7 @@ ApplicationWindow {
                         Layout.preferredWidth: 120
                         Layout.alignment: Qt.AlignVCenter
                         focusPolicy: Qt.ClickFocus
-                        model: ["无过渡", "0.5秒", "1秒", "1.5秒", "2秒", "3秒", "4秒", "5秒", "6秒", "7秒", "8秒"]
+                        model: window.durationModel
                         currentIndex: window.durationIndex
 
                         onActivated: function(index) {

@@ -1,4 +1,4 @@
-// ImageViewer.qml - 保持不变（已经是深色主题）
+// ImageViewer.qml - 图片查看器组件
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -11,19 +11,6 @@ Item {
 
     // 双击信号
     signal imageDoubleClicked()
-
-    // 可复用组件：主题化Rectangle
-    component ThemedRectangle: Rectangle {
-        property color bgColor: customBackground
-        property color accentColor: customAccent
-        property int borderWidth: 1
-        property real borderRadius: 8
-
-        color: bgColor
-        border.color: accentColor
-        border.width: borderWidth
-        radius: borderRadius
-    }
 
     // 辅助函数：设置旋转轴
     function setRotationAxis(rotationObj, x, y, z) {
@@ -54,8 +41,13 @@ Item {
     readonly property int animDuration: transitionDuration / 2
     readonly property var animEasing: Easing.InOutQuad
 
-    ThemedRectangle {
+    // 使用内联 Rectangle 代替组件
+    Rectangle {
         anchors.fill: parent
+        color: customBackground
+        border.color: customAccent
+        border.width: 1
+        radius: 8
         z: -1
     }
     
@@ -153,6 +145,7 @@ Item {
             var maxX = overflowX / 2
             imageOffset.x = Math.min(maxX, Math.max(minX, imageOffset.x))
         } else {
+            // 图片宽度小于窗口，居中显示
             imageOffset.x = 0
         }
 
@@ -161,6 +154,7 @@ Item {
             var maxY = overflowY / 2
             imageOffset.y = Math.min(maxY, Math.max(minY, imageOffset.y))
         } else {
+            // 图片高度小于窗口，居中显示
             imageOffset.y = 0
         }
     }
@@ -253,7 +247,8 @@ Item {
         // 选择过渡效果
         var selectedTransition = transitionType
         if (selectedTransition === -1) {
-            selectedTransition = Math.floor(Math.random() * 77)
+            // 随机选择0-79（所有80个过渡效果）
+            selectedTransition = Math.floor(Math.random() * 80)
         }
         
         resetTransform()
@@ -274,17 +269,17 @@ Item {
         nextImageItem.source = nextImage || ""
         
         // 着色器过渡
-        if (selectedTransition >= 29 && selectedTransition <= 76) {
+        if (selectedTransition >= 29 && selectedTransition <= 79) {
             nextImageItem.opacity = 1.0
             currentImageItem.visible = true
             nextImageItem.visible = true
-            
+
             var shaderEffectIndex = selectedTransition - 29
             shaderEffectType = shaderEffectIndex
             shaderTransition.visible = true
             currentImageItem.opacity = 1.0
             nextImageItem.opacity = 1.0
-            
+
             updateTimer.start()
         } else {
             // 普通动画过渡
@@ -452,7 +447,7 @@ Item {
                 border.color: customAccent
                 border.width: 1
                 radius: 8
-                z: 1  // 边框在着色器之上
+                z: 1
             }
 
             ShaderEffect {
