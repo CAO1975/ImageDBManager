@@ -404,17 +404,7 @@ bool Database::createGroup(const QString &name, int parentId)
 
 QVariantList Database::getAllGroups()
 {
-    qDebug() << "Database::getAllGroups() called";
     QVariantList result = getGroupsRecursive(-1);
-    qDebug() << "Database::getAllGroups() returning" << result.size() << "groups";
-    // 输出结果的详细信息
-    for (int i = 0; i < result.size(); ++i) {
-        QVariantMap group = result.at(i).toMap();
-        qDebug() << "Group" << i << ":" << group["name"].toString() << "ID:" << group["id"].toInt();
-        if (group.contains("children")) {
-            qDebug() << "  Children count:" << group["children"].toList().size();
-        }
-    }
     return result;
 }
 
@@ -436,7 +426,6 @@ QVariantList Database::getGroupsRecursive(int parentId)
     
     if (!query.exec()) {
         m_lastError = query.lastError().text();
-        qDebug() << "Database::getGroupsRecursive() query error:" << m_lastError;
         return groups;
     }
     
@@ -446,19 +435,15 @@ QVariantList Database::getGroupsRecursive(int parentId)
         group["id"] = id;
         group["name"] = query.value(1).toString();
         
-        qDebug() << "Database::getGroupsRecursive() found group:" << group["name"].toString() << "with id:" << id;
-        
         // 获取子分组
         QVariantList children = getGroupsRecursive(id);
         if (!children.isEmpty()) {
             group["children"] = children;
-            qDebug() << "Group" << group["name"].toString() << "has" << children.size() << "children";
         }
         
         groups.append(group);
     }
     
-    qDebug() << "Database::getGroupsRecursive() returning" << groups.size() << "groups for parent" << parentId;
     return groups;
 }
 

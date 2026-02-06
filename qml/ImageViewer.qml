@@ -35,10 +35,14 @@ Item {
         nextRotationX.axis.z = 0
     }
 
+    // 组件销毁时清理资源
+    Component.onDestruction: {
+        stopAllAnimations()
+    }
 
 
-    // 动画通用属性
-    readonly property int animDuration: transitionDuration / 2
+
+    // 动画通用缓动属性
     readonly property var animEasing: Easing.InOutQuad
 
     // 使用内联 Rectangle 代替组件
@@ -129,6 +133,11 @@ Item {
         flipYLeftAnimation.stop()
         flipYRightAnimation.stop()
         spiralFlyAnimation.stop()
+        flipScaleAnimation.stop()
+        flipScaleXAnimation.stop()
+        pendulumAnimation.stop()
+        horizontalRollAnimation.stop()
+        verticalRollAnimation.stop()
         updateTimer.stop()
     }
 
@@ -247,8 +256,8 @@ Item {
         // 选择过渡效果
         var selectedTransition = transitionType
         if (selectedTransition === -1) {
-            // 随机选择0-79（所有80个过渡效果）
-            selectedTransition = Math.floor(Math.random() * 80)
+            // 随机选择0-82（所有83个过渡效果）
+            selectedTransition = Math.floor(Math.random() * 83)
         }
         
         resetTransform()
@@ -269,12 +278,12 @@ Item {
         nextImageItem.source = nextImage || ""
         
         // 着色器过渡
-        if (selectedTransition >= 29 && selectedTransition <= 79) {
+        if (selectedTransition >= 32 && selectedTransition <= 82) {
             nextImageItem.opacity = 1.0
             currentImageItem.visible = true
             nextImageItem.visible = true
 
-            var shaderEffectIndex = selectedTransition - 29
+            var shaderEffectIndex = selectedTransition - 32
             shaderEffectType = shaderEffectIndex
             shaderTransition.visible = true
             currentImageItem.opacity = 1.0
@@ -320,6 +329,9 @@ Item {
                 case 26: spiralFlyAnimation.start(); break
                 case 27: flipScaleAnimation.start(); break
                 case 28: flipScaleXAnimation.start(); break
+                case 29: pendulumAnimation.start(); break
+                case 30: horizontalRollAnimation.start(); break
+                case 31: verticalRollAnimation.start(); break
                 default: fadeAnimation.start(); break
             }
         }
@@ -337,26 +349,41 @@ Item {
             currentImage = nextImage
         }
         nextImage = null
+        newImageId = -1
         
         resetTransform()
         
         currentImageItem.source = currentImage || ""
         currentImageItem.opacity = 1.0; currentImageItem.rotation = 0
         currentRotation.angle = 0  // 重置Y轴旋转角度
+        currentRotationX.angle = 0  // 重置X轴旋转角度
         currentImageItem.x = Qt.binding(function() { return imageOffset.x })
         currentImageItem.y = Qt.binding(function() { return imageOffset.y })
         currentImageItem.scale = Qt.binding(function() { return scaleFactor })
+        // 重置旧图片的挤压变换
+        currentHorizontalScale.xScale = 1.0
+        currentHorizontalScale.yScale = 1.0
+        currentVerticalScale.xScale = 1.0
+        currentVerticalScale.yScale = 1.0
+        // 重置新图片的挤压变换
+        horizontalScale.xScale = 1.0
+        horizontalScale.yScale = 1.0
+        verticalScale.xScale = 1.0
+        verticalScale.yScale = 1.0
         
         nextImageItem.opacity = 0.0; nextImageItem.rotation = 0
         nextRotation.angle = 0  // 重置Y轴旋转角度
+        nextRotationX.angle = 0  // 重置X轴旋转角度
         nextImageItem.x = Qt.binding(function() { return imageOffset.x })
         nextImageItem.y = Qt.binding(function() { return imageOffset.y })
+        // 重置z层级
+        currentImageItem.z = -1
+        nextImageItem.z = -1
         nextImageItem.scale = Qt.binding(function() { return scaleFactor })
         
         // 重置着色器过渡进度
         shaderEffectItem.transitionProgress = 0
         updateTimer.stop();  // 停止更新定时器
-        console.log("Ending shader transition, resetting transitionProgress to", shaderEffectItem.transitionProgress, "for effectType", shaderEffectType)
         // 隐藏着色器过渡组件，显示普通图片项
         shaderTransition.visible = false
         currentImageItem.visible = true  // 确保当前图片可见
@@ -399,6 +426,20 @@ Item {
                     origin.y: currentImageItem.height / 2
                     axis { x: 1; y: 0; z: 0 }
                     angle: 0
+                },
+                Scale {
+                    id: currentHorizontalScale
+                    origin.x: currentImageItem.width / 2
+                    origin.y: currentImageItem.height / 2
+                    xScale: 1.0
+                    yScale: 1.0
+                },
+                Scale {
+                    id: currentVerticalScale
+                    origin.x: currentImageItem.width / 2
+                    origin.y: currentImageItem.height / 2
+                    xScale: 1.0
+                    yScale: 1.0
                 }
             ]
         }
@@ -429,6 +470,20 @@ Item {
                     origin.y: nextImageItem.height / 2
                     axis { x: 1; y: 0; z: 0 }
                     angle: 0
+                },
+                Scale {
+                    id: horizontalScale
+                    origin.x: 0
+                    origin.y: nextImageItem.height / 2
+                    xScale: 1.0
+                    yScale: 1.0
+                },
+                Scale {
+                    id: verticalScale
+                    origin.x: nextImageItem.width / 2
+                    origin.y: 0
+                    xScale: 1.0
+                    yScale: 1.0
                 }
             ]
         }
@@ -482,18 +537,7 @@ Item {
 
                 // 添加调试信息
                 Component.onCompleted: {
-                    console.log("ShaderEffect loaded, fragmentShader path: " + fragmentShader)
-
-                    // 检查着色器是否加载成功
-                    if (fragmentShader) {
-                        console.log("Fragment shader loaded successfully")
-                        console.log("ShaderEffect status:", status)
-                    } else {
-                        console.log("ERROR: Fragment shader failed to load")
-                    }
-
-                    // 验证着色器源是否正确设置
-                    console.log("ShaderEffect source properties set")
+                    // 着色器加载完成
                 }
 
                 // 将图片源传递给着色器
@@ -508,14 +552,7 @@ Item {
 
                 // 监听状态变化
                 onStatusChanged: {
-                    console.log("ShaderEffect status changed:", status)
-                }
-
-                // 监听日志变化
-                onLogChanged: {
-                    if (log && log.length > 0) {
-                        console.log("ShaderEffect log:", log)
-                    }
+                    // 状态变化处理
                 }
             }
         }
@@ -526,11 +563,10 @@ Item {
             acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
             z: 100  // 确保在最上层
 
-            onDoubleClicked: function(mouse) {
-                // 双击进入全屏模式
-                console.log("ImageViewer MouseArea doubleClicked")
-                imageDoubleClicked()
-            }
+        onDoubleClicked: function(mouse) {
+            // 双击进入全屏模式
+            imageDoubleClicked()
+        }
 
             onPressed: {
                 if (!transitioning) {
@@ -976,48 +1012,61 @@ Item {
         }
     }
     
-    // 缩放过渡动画效果 - 旧图缩小到0，新图放大到正常大小
-    ParallelAnimation {
+    // 弹性缩放动画效果 - 旧图弹性缩小消失，新图弹性放大出现（弹跳效果明显）
+    SequentialAnimation {
         id: scaleTransitionAnimation
-        NumberAnimation {
-            target: nextImageItem
-            property: "z"
-            from: 0
-            to: 2
-            duration: 1
+
+        // 第一阶段：旧图弹性缩小消失
+        ParallelAnimation {
+            NumberAnimation {
+                target: nextImageItem
+                property: "z"
+                from: 0
+                to: 2
+                duration: 1
+            }
+            NumberAnimation {
+                target: currentImageItem
+                property: "scale"
+                from: 1.0
+                to: 0.0
+                duration: transitionDuration * 0.6
+                easing.type: Easing.OutElastic
+                easing.amplitude: 2.0
+                easing.period: 0.4
+            }
+            NumberAnimation {
+                target: currentImageItem
+                property: "opacity"
+                from: 1.0
+                to: 0.0
+                duration: transitionDuration * 0.5
+                easing.type: Easing.OutQuad
+            }
         }
-        NumberAnimation {
-            target: currentImageItem
-            property: "scale"
-            from: 1.0
-            to: 0.0
-            duration: transitionDuration
-            easing.type: Easing.InOutQuad
+
+        // 第二阶段：新图弹性放大出现（弹跳效果）
+        ParallelAnimation {
+            NumberAnimation {
+                target: nextImageItem
+                property: "scale"
+                from: 0.0
+                to: 1.0
+                duration: transitionDuration * 0.7
+                easing.type: Easing.OutElastic
+                easing.amplitude: 2.5
+                easing.period: 0.5
+            }
+            NumberAnimation {
+                target: nextImageItem
+                property: "opacity"
+                from: 0.0
+                to: 1.0
+                duration: transitionDuration * 0.4
+                easing.type: Easing.OutQuad
+            }
         }
-        NumberAnimation {
-            target: currentImageItem
-            property: "opacity"
-            from: 1.0
-            to: 0.0
-            duration: transitionDuration
-            easing.type: Easing.InOutQuad
-        }
-        NumberAnimation {
-            target: nextImageItem
-            property: "scale"
-            from: 0.0
-            to: 1.0
-            duration: transitionDuration
-            easing.type: Easing.InOutQuad
-        }
-        NumberAnimation {
-            target: nextImageItem
-            property: "opacity"
-            from: 0.0
-            to: 1.0
-            duration: transitionDuration
-            easing.type: Easing.InOutQuad
-        }
+
         onRunningChanged: { if (!running && transitioning) endTransition() }
     }
     
@@ -1471,133 +1520,157 @@ Item {
         }
     }
 
-    // 螺旋飞出飞入动画 - 旧图片螺旋变小向中心飞去消失，新图片从中心螺旋变大飞回
+    // 螺旋飞出飞入动画 - 旧图片蓄力后加速旋转甩出，新图片减速旋转飞入后惯性摆动
     SequentialAnimation {
         id: spiralFlyAnimation
 
-        // 第一阶段：旧图片螺旋飞出
+        // 第一阶段：旧图片蓄力 + 加速旋转甩出（无淡出，直接旋转消失）
         ParallelAnimation {
-            // 旧图片：缩小、旋转、螺旋向中心移动、透明度降低
-            NumberAnimation {
-                target: currentImageItem
-                property: "scale"
-                from: 1.0
-                to: 0.0
-                duration: transitionDuration / 2
-                easing.type: Easing.InOutQuad
-            }
+            // 蓄力后拉（短促有力）
             NumberAnimation {
                 target: currentImageItem
                 property: "rotation"
                 from: 0
-                to: 360  // 旋转1圈（360度）
-                duration: transitionDuration / 2
-                easing.type: Easing.InOutQuad
-            }
-            // X轴螺旋移动：从0开始，先左移再右移，回到中心
-            SequentialAnimation {
-                NumberAnimation {
-                    target: currentImageItem
-                    property: "x"
-                    from: 0
-                    to: -200
-                    duration: transitionDuration / 4
-                    easing.type: Easing.InOutQuad
-                }
-                NumberAnimation {
-                    target: currentImageItem
-                    property: "x"
-                    from: -200
-                    to: 0
-                    duration: transitionDuration / 4
-                    easing.type: Easing.InOutQuad
-                }
-            }
-            // Y轴螺旋移动：从0开始，先上移再下移，回到中心
-            SequentialAnimation {
-                NumberAnimation {
-                    target: currentImageItem
-                    property: "y"
-                    from: 0
-                    to: -200
-                    duration: transitionDuration / 4
-                    easing.type: Easing.InOutQuad
-                }
-                NumberAnimation {
-                    target: currentImageItem
-                    property: "y"
-                    from: -200
-                    to: 0
-                    duration: transitionDuration / 4
-                    easing.type: Easing.InOutQuad
-                }
+                to: -25
+                duration: transitionDuration / 6
+                easing.type: Easing.OutQuad
             }
             NumberAnimation {
                 target: currentImageItem
-                property: "opacity"
+                property: "scale"
                 from: 1.0
-                to: 0.0
-                duration: transitionDuration / 2
-                easing.type: Easing.InOutQuad
+                to: 0.9
+                duration: transitionDuration / 6
+                easing.type: Easing.OutQuad
             }
         }
 
-        // 第二阶段：新图片螺旋飞入
+        // 第二阶段：旧图片加速甩出（旋转+缩小+位移同时，无淡出）
         ParallelAnimation {
-            // 新图片：从中心开始，放大、螺旋向外移动、透明度增加
+            NumberAnimation {
+                target: currentImageItem
+                property: "scale"
+                from: 0.9
+                to: 0.0
+                duration: transitionDuration / 2.5
+                easing.type: Easing.InCubic
+            }
+            NumberAnimation {
+                target: currentImageItem
+                property: "rotation"
+                from: -25
+                to: 540  // 1.5圈，流畅的旋转
+                duration: transitionDuration / 2.5
+                easing.type: Easing.InCubic
+            }
+            // 螺旋轨迹（使用正弦曲线模拟自然弧线）
+            NumberAnimation {
+                target: currentImageItem
+                property: "x"
+                from: 0
+                to: 0
+                duration: transitionDuration / 2.5
+                easing.type: Easing.InOutSine
+            }
+            NumberAnimation {
+                target: currentImageItem
+                property: "y"
+                from: 0
+                to: 0
+                duration: transitionDuration / 2.5
+                easing.type: Easing.InOutSine
+            }
+        }
+
+        // 第三阶段：新图片飞入（从高速旋转减速，包含惯性摆动，无停顿）
+        ParallelAnimation {
+            NumberAnimation {
+                target: nextImageItem
+                property: "z"
+                from: 0
+                to: 2
+                duration: 1
+            }
             NumberAnimation {
                 target: nextImageItem
                 property: "scale"
                 from: 0.0
                 to: 1.0
                 duration: transitionDuration / 2
-                easing.type: Easing.InOutQuad
+                easing.type: Easing.OutCubic
             }
-            // 旋转动画：直接旋转回来显示原图
-            NumberAnimation {
-                target: nextImageItem
-                property: "rotation"
-                from: 360
-                to: 0
-                duration: transitionDuration / 2
-                easing.type: Easing.InOutQuad
+            // 旋转飞入带惯性摆动（连续动画，无停顿）
+            SequentialAnimation {
+                // 主旋转减速到位
+                NumberAnimation {
+                    target: nextImageItem
+                    property: "rotation"
+                    from: -540
+                    to: 8
+                    duration: transitionDuration / 2.5
+                    easing.type: Easing.OutCubic
+                }
+                // 第一次回摆（过冲）
+                NumberAnimation {
+                    target: nextImageItem
+                    property: "rotation"
+                    from: 8
+                    to: -4
+                    duration: transitionDuration / 8
+                    easing.type: Easing.OutQuad
+                }
+                // 第二次回摆（衰减）
+                NumberAnimation {
+                    target: nextImageItem
+                    property: "rotation"
+                    from: -4
+                    to: 2
+                    duration: transitionDuration / 8
+                    easing.type: Easing.OutQuad
+                }
+                // 最终稳定
+                NumberAnimation {
+                    target: nextImageItem
+                    property: "rotation"
+                    from: 2
+                    to: 0
+                    duration: transitionDuration / 8
+                    easing.type: Easing.OutQuad
+                }
             }
-            // X轴螺旋移动：从0开始，先右移再左移，回到中心
+            // 配合旋转的缩放摆动（同步进行）
             SequentialAnimation {
                 NumberAnimation {
                     target: nextImageItem
-                    property: "x"
-                    from: 0
-                    to: 200
-                    duration: transitionDuration / 4
-                    easing.type: Easing.InOutQuad
+                    property: "scale"
+                    from: 0.0
+                    to: 1.02
+                    duration: transitionDuration / 2.5
+                    easing.type: Easing.OutCubic
                 }
                 NumberAnimation {
                     target: nextImageItem
-                    property: "x"
-                    from: 200
-                    to: 0
-                    duration: transitionDuration / 4
-                    easing.type: Easing.InOutQuad
-                }
-            }
-            // Y轴螺旋移动：从0开始，先下移再上移，回到中心
-            SequentialAnimation {
-                NumberAnimation {
-                    target: nextImageItem
-                    property: "y"
-                    from: 0
-                    to: 200
-                    duration: transitionDuration / 4
-                    easing.type: Easing.InOutQuad
+                    property: "scale"
+                    from: 1.02
+                    to: 0.99
+                    duration: transitionDuration / 8
+                    easing.type: Easing.OutQuad
                 }
                 NumberAnimation {
                     target: nextImageItem
-                    property: "y"
-                    from: 200
-                    to: 0
-                    duration: transitionDuration / 4
-                    easing.type: Easing.InOutQuad
+                    property: "scale"
+                    from: 0.99
+                    to: 1.005
+                    duration: transitionDuration / 8
+                    easing.type: Easing.OutQuad
+                }
+                NumberAnimation {
+                    target: nextImageItem
+                    property: "scale"
+                    from: 1.005
+                    to: 1.0
+                    duration: transitionDuration / 8
+                    easing.type: Easing.OutQuad
                 }
             }
             NumberAnimation {
@@ -1605,8 +1678,8 @@ Item {
                 property: "opacity"
                 from: 0.0
                 to: 1.0
-                duration: transitionDuration / 2
-                easing.type: Easing.InOutQuad
+                duration: transitionDuration / 4
+                easing.type: Easing.OutQuad
             }
         }
 
@@ -1617,28 +1690,233 @@ Item {
         }
     }
 
-    // 着色器过渡动画 - 用于控制着色器过渡进度
-    NumberAnimation {
-        id: shaderTransitionAnimation
-        target: shaderTransition
-        property: "transitionProgress"
-        from: 0
-        to: 1
-        duration: transitionDuration
-        easing.type: Easing.InOutQuad
-        
+    // 钟摆摆动效果 - 旧图片像钟摆一样摆动淡出，新图片摆动进入
+    SequentialAnimation {
+        id: pendulumAnimation
+
+        // 初始化
+        ScriptAction {
+            script: {
+                nextImageItem.x = 0
+                nextImageItem.y = 0
+                nextImageItem.opacity = 0.0
+                nextImageItem.scale = 1.0
+                nextImageItem.rotation = -35
+                currentImageItem.opacity = 1.0
+                currentImageItem.rotation = 0
+            }
+        }
+
+        // 第一阶段：旧图片钟摆摆动（向右-向左-向右然后消失）
+        ParallelAnimation {
+            NumberAnimation {
+                target: currentImageItem
+                property: "rotation"
+                from: 0
+                to: 35
+                duration: transitionDuration / 6
+                easing.type: Easing.InOutSine
+            }
+        }
+        ParallelAnimation {
+            NumberAnimation {
+                target: currentImageItem
+                property: "rotation"
+                from: 35
+                to: -30
+                duration: transitionDuration / 5
+                easing.type: Easing.InOutSine
+            }
+        }
+        ParallelAnimation {
+            NumberAnimation {
+                target: currentImageItem
+                property: "rotation"
+                from: -30
+                to: 25
+                duration: transitionDuration / 5
+                easing.type: Easing.InOutSine
+            }
+            NumberAnimation {
+                target: currentImageItem
+                property: "opacity"
+                from: 1.0
+                to: 0.0
+                duration: transitionDuration / 5
+                easing.type: Easing.OutQuad
+            }
+        }
+
+        // 第二阶段：新图片钟摆摆动进入（从另一侧开始）
+        ParallelAnimation {
+            NumberAnimation {
+                target: nextImageItem
+                property: "z"
+                from: 0
+                to: 2
+                duration: 1
+            }
+            NumberAnimation {
+                target: nextImageItem
+                property: "rotation"
+                from: -35
+                to: 30
+                duration: transitionDuration / 5
+                easing.type: Easing.InOutSine
+            }
+            NumberAnimation {
+                target: nextImageItem
+                property: "opacity"
+                from: 0.0
+                to: 1.0
+                duration: transitionDuration / 6
+                easing.type: Easing.InQuad
+            }
+        }
+        ParallelAnimation {
+            NumberAnimation {
+                target: nextImageItem
+                property: "rotation"
+                from: 30
+                to: -20
+                duration: transitionDuration / 5
+                easing.type: Easing.InOutSine
+            }
+        }
+        ParallelAnimation {
+            NumberAnimation {
+                target: nextImageItem
+                property: "rotation"
+                from: -20
+                to: 10
+                duration: transitionDuration / 6
+                easing.type: Easing.InOutSine
+            }
+        }
+        ParallelAnimation {
+            NumberAnimation {
+                target: nextImageItem
+                property: "rotation"
+                from: 10
+                to: 0
+                duration: transitionDuration / 6
+                easing.type: Easing.InOutSine
+            }
+        }
+
         onRunningChanged: {
-            if (running) {
-                console.log("Shader transition animation started, transitionProgress:", shaderTransition.transitionProgress)
-                // 启动定时器来更新progress值，确保着色器参数正确更新
-                updateTimer.start();
-            } else {
-                console.log("Shader transition animation finished, transitionProgress:", shaderTransition.transitionProgress)
-                updateTimer.stop();
+            if (!running && transitioning) {
+                endTransition();
             }
         }
     }
-    
+
+    // 挤压（横向）效果 - 旧图片从右向左被挤压消失，新图片从左向右展开
+    SequentialAnimation {
+        id: horizontalRollAnimation
+
+        // 初始化
+        ScriptAction {
+            script: {
+                nextImageItem.x = 0
+                nextImageItem.y = 0
+                nextImageItem.opacity = 1.0
+                nextImageItem.scale = 1.0
+                // 新图片：原点左侧，横向缩放为0（从左边展开）
+                horizontalScale.origin.x = 0
+                horizontalScale.origin.y = nextImageItem.height / 2
+                horizontalScale.xScale = 0.001
+                horizontalScale.yScale = 1.0
+                // 旧图片：原点右侧，正常状态（向左挤压消失）
+                currentHorizontalScale.origin.x = currentImageItem.width
+                currentHorizontalScale.origin.y = currentImageItem.height / 2
+                currentHorizontalScale.xScale = 1.0
+                currentHorizontalScale.yScale = 1.0
+            }
+        }
+
+        // 同时进行：旧图片被挤压消失，新图片展开
+        ParallelAnimation {
+            // 新图片从左向右横向展开
+            NumberAnimation {
+                target: horizontalScale
+                property: "xScale"
+                from: 0.001
+                to: 1.0
+                duration: transitionDuration
+                easing.type: Easing.OutCubic
+            }
+            // 旧图片从左向右被挤压消失
+            NumberAnimation {
+                target: currentHorizontalScale
+                property: "xScale"
+                from: 1.0
+                to: 0.001
+                duration: transitionDuration
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        onRunningChanged: {
+            if (!running && transitioning) {
+                endTransition()
+            }
+        }
+    }
+
+    // 挤压（纵向）效果 - 旧图片从上向下被挤压消失，新图片从上向下展开
+    SequentialAnimation {
+        id: verticalRollAnimation
+
+        // 初始化
+        ScriptAction {
+            script: {
+                nextImageItem.x = 0
+                nextImageItem.y = 0
+                nextImageItem.opacity = 1.0
+                nextImageItem.scale = 1.0
+                // 新图片：原点顶部，纵向缩放为0（从上展开）
+                verticalScale.origin.x = nextImageItem.width / 2
+                verticalScale.origin.y = 0
+                verticalScale.xScale = 1.0
+                verticalScale.yScale = 0.001
+                // 旧图片：原点底部，正常状态（向上挤压消失）
+                currentVerticalScale.origin.x = currentImageItem.width / 2
+                currentVerticalScale.origin.y = currentImageItem.height
+                currentVerticalScale.xScale = 1.0
+                currentVerticalScale.yScale = 1.0
+            }
+        }
+
+        // 同时进行：旧图片被挤压消失，新图片展开
+        ParallelAnimation {
+            // 新图片从上向下纵向展开
+            NumberAnimation {
+                target: verticalScale
+                property: "yScale"
+                from: 0.001
+                to: 1.0
+                duration: transitionDuration
+                easing.type: Easing.OutCubic
+            }
+            // 旧图片从上向下被挤压消失
+            NumberAnimation {
+                target: currentVerticalScale
+                property: "yScale"
+                from: 1.0
+                to: 0.001
+                duration: transitionDuration
+                easing.type: Easing.OutCubic
+            }
+        }
+
+        onRunningChanged: {
+            if (!running && transitioning) {
+                endTransition()
+            }
+        }
+    }
+
     // 定时器用于更新着色器属性
     Timer {
         id: updateTimer
@@ -1655,10 +1933,7 @@ Item {
             var easeT = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 
             // 直接更新着色器的progress属性
-            // 注意：现在需要访问内部的ShaderEffect对象
             shaderEffectItem.transitionProgress = easeT
-
-            console.log("Progress updated:", easeT.toFixed(2))
 
             if (t >= 1.0) {
                 updateTimer.stop()

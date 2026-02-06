@@ -11,17 +11,96 @@ layout(std140, binding = 0) uniform buf {
     mat4 qt_Matrix;
     float qt_Opacity;
     float progress;
-    int effectType;  // 效果类型: 0=溶解, 1=马赛克, 2=水波扭曲, 3=从左向右擦除, 4=从右向左擦除, 5=从上向下擦除, 6=从下向上擦除, 7=X轴窗帘, 8=Y轴窗帘, 9=故障, 10=旋转, 11=横向拉伸, 12=纵向拉伸, 13=百叶窗, 14=扭曲呼吸, 15=涟漪扩散, 16=鱼眼, 17=横向切片, 18=纵向切片, 19=反色, 20=模糊渐变, 21=破碎, 22=雷达扫描, 23=万花筒, 24=火焰燃烧, 25=水墨晕染, 26=粒子爆炸, 27=极光流动, 28=赛博朋克故障, 29=黑洞吞噬, 30=全息投影, 31=网格块, 32=液体变形, 33=像素化, 34=纸张撕裂, 35=磁性吸附, 36=玻璃破碎, 37=电影卷轴, 38=DNA双螺旋, 39=极坐标映射, 40=横向幕布, 41=纵向幕布, 42=霓虹灯, 43=传送门, 44=粒子重组, 45=黑白颜色过渡, 46=球体映射, 47=棱镜折射, 48=螺旋变形, 49=马赛克旋转, 50=液态融合
-    vec3 backgroundColor;  // 背景色 (RGB)
+    int effectType;
+    vec3 backgroundColor;
 };
 
 // Samplers
 layout(binding = 1) uniform sampler2D from;
 layout(binding = 2) uniform sampler2D to;
 
+// ========== 常量定义 ==========
+const vec2 CENTER = vec2(0.5, 0.5);
+const float PI = 3.14159;
+const float TWO_PI = 6.28318;
+const float HALF_PI = 1.5708;
+
+// ========== 通用工具函数 ==========
+
 // 伪随机函数
 float random(vec2 co) {
     return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+// 平滑步进函数（三次Hermite插值）
+float smoothStep3(float edge0, float edge1, float x) {
+    float t = clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
+    return t * t * (3.0 - 2.0 * t);
+}
+
+// 旋转矩阵
+mat2 rotationMatrix(float angle) {
+    float c = cos(angle), s = sin(angle);
+    return mat2(c, s, -s, c);
+}
+
+// 计算极坐标
+void toPolar(vec2 uv, vec2 center, out float dist, out float angle) {
+    vec2 offset = uv - center;
+    dist = length(offset);
+    angle = atan(offset.y, offset.x);
+}
+
+// RGB色差分离
+vec4 rgbSplit(sampler2D tex, vec2 uv, float offset) {
+    float r = texture(tex, uv + vec2(offset, 0.0)).r;
+    float g = texture(tex, uv).g;
+    float b = texture(tex, uv - vec2(offset, 0.0)).b;
+    return vec4(r, g, b, 1.0);
+}
+
+// 盒式模糊
+vec4 boxBlur(sampler2D tex, vec2 uv, float blurAmount, int samples) {
+    vec4 color = vec4(0.0);
+    float total = 0.0;
+    for (int x = -samples; x <= samples; x++) {
+        for (int y = -samples; y <= samples; y++) {
+            vec2 offset = vec2(float(x), float(y)) * blurAmount;
+            color += texture(tex, uv + offset);
+            total += 1.0;
+        }
+    }
+    return color / total;
+}
+
+// 计算过渡阶段（前半段/后半段）
+struct PhaseInfo {
+    float t;           // 0-1的归一化进度
+    bool isFirstHalf;  // 是否前半段
+};
+
+PhaseInfo getPhase(float p) {
+    PhaseInfo info;
+    info.isFirstHalf = p < 0.5;
+    info.t = info.isFirstHalf ? p * 2.0 : (p - 0.5) * 2.0;
+    return info;
+}
+
+// 球体投影UV计算
+vec2 sphereProjectUV(vec2 uv, vec2 center, float dist, float angle, float rotation) {
+    float maxDist = 0.35;
+    if (dist > maxDist * 1.1) return uv;
+    
+    float normalizedDist = dist / maxDist;
+    float sphereHeight = sqrt(1.0 - normalizedDist * normalizedDist);
+    float projectedDist = dist * sphereHeight * 1.2;
+    return center + vec2(cos(angle + rotation), sin(angle + rotation)) * projectedDist;
+}
+
+// 确保透明区域显示背景色
+vec4 applyBackground(vec4 color, vec3 bg) {
+    if (color.a < 0.01) return vec4(bg, 1.0);
+    return vec4(color.rgb, 1.0);
 }
 
 void main() {
@@ -50,13 +129,10 @@ void main() {
 
         case 2: // 水波扭曲
         {
-            // 扭曲强度随 progress 变化：0→1→0（仅在过渡过程中有扭曲）
-            float waveIntensity = sin(progress * 3.14159);
+            float waveIntensity = sin(progress * PI);
             float wave = sin(uv.y * 20.0 + progress * 10.0) * 0.02 * waveIntensity;
-            vec2 uvFrom = vec2(uv.x - wave, uv.y);
-            vec2 uvTo = vec2(uv.x + wave, uv.y);
-            colorFrom = texture(from, uvFrom);
-            colorTo = texture(to, uvTo);
+            colorFrom = texture(from, vec2(uv.x - wave, uv.y));
+            colorTo = texture(to, vec2(uv.x + wave, uv.y));
             break;
         }
 
@@ -86,65 +162,35 @@ void main() {
 
         case 7: // X轴窗帘（从中心向两侧）
         {
-            // 图片从中间向两侧展开：左半部分向左移动，右半部分向右移动
-            // 中心点 X 坐标
-            float centerX = 0.5;
-
-            // 计算当前像素距离中心的距离（0.0 到 0.5）
-            float distFromCenter = abs(uv.x - centerX);
-
-            // 窗帘拉开的位置：从中心向两侧扩展
-            float curtainPos = progress * 0.5;
-
-            // 如果当前像素在窗帘开合位置之外，显示新图
-            // 否则显示旧图
-            mixFactor = step(distFromCenter, curtainPos);
+            mixFactor = step(abs(uv.x - 0.5), progress * 0.5);
             break;
         }
 
         case 8: // Y轴窗帘（从中心向上下）
         {
-            // 图片从中间向上下展开：上半部分向上移动，下半部分向下移动
-            // 中心点 Y 坐标
-            float centerY = 0.5;
-
-            // 计算当前像素距离中心的距离（0.0 到 0.5）
-            float distFromCenter = abs(uv.y - centerY);
-
-            // 窗帘拉开的位置：从中心向上下扩展
-            float curtainPos = progress * 0.5;
-
-            // 如果当前像素在窗帘开合位置之外，显示新图
-            // 否则显示旧图
-            mixFactor = step(distFromCenter, curtainPos);
+            mixFactor = step(abs(uv.y - 0.5), progress * 0.5);
             break;
         }
 
         case 9: // 故障艺术
         {
             float offset = 0.01 * sin(progress * 20.0);
-            float r = texture(from, uv + vec2(offset, 0.0)).r;
-            float g = texture(from, uv).g;
-            float b = texture(from, uv - vec2(offset, 0.0)).b;
-            colorFrom = vec4(r, g, b, 1.0);
+            colorFrom = rgbSplit(from, uv, offset);
 
             float noise = random(uv);
             float glitch = step(noise, progress * 0.1);
             if (progress > 0.3 && progress < 0.7) {
-                colorFrom = mix(colorFrom, vec4(1.0, 1.0, 1.0, 1.0), glitch);
+                colorFrom = mix(colorFrom, vec4(1.0), glitch);
             }
             break;
         }
 
         case 10: // 旋转效果
         {
-            vec2 center = vec2(0.5, 0.5);
-            float angleFrom = progress * 3.14159;
-            float angleTo = (1.0 - progress) * 3.14159;
-            mat2 rotFrom = mat2(cos(angleFrom), sin(angleFrom), -sin(angleFrom), cos(angleFrom));
-            mat2 rotTo = mat2(cos(angleTo), sin(angleTo), -sin(angleTo), cos(angleTo));
-            vec2 uvFrom = center + rotFrom * (uv - center);
-            vec2 uvTo = center + rotTo * (uv - center);
+            float angleFrom = progress * PI;
+            float angleTo = (1.0 - progress) * PI;
+            vec2 uvFrom = CENTER + rotationMatrix(angleFrom) * (uv - CENTER);
+            vec2 uvTo = CENTER + rotationMatrix(angleTo) * (uv - CENTER);
             colorFrom = texture(from, uvFrom);
             colorTo = texture(to, uvTo);
             break;
@@ -152,55 +198,37 @@ void main() {
 
         case 11: // 横向拉伸效果
         {
-            vec2 center = vec2(0.5, 0.5);
-            vec2 uvFromCenter = uv - center;
-
-            // 横向拉伸：旧图在X轴方向拉伸变窄，新图从窄变宽
-            float angle = progress * 3.14159;  // 0→π
-
-            // 决定显示哪张图：拉伸前半段显示旧图，后半段显示新图
-            if (angle < 1.5708) {  // π/2
-                // 前半段：显示旧图，逐渐变窄
-                float scale = abs(cos(angle));
-                vec2 uvFrom = center + vec2(uvFromCenter.x * scale, uvFromCenter.y);
-                colorFrom = texture(from, uvFrom);
-                colorTo = colorFrom;
+            vec2 offset = uv - CENTER;
+            float angle = progress * PI;
+            float scale = abs(cos(angle));
+            vec2 scaledUV = CENTER + vec2(offset.x * scale, offset.y);
+            
+            if (angle < HALF_PI) {
+                colorFrom = texture(from, scaledUV);
                 mixFactor = 0.0;
             } else {
-                // 后半段：显示新图，从窄变宽
-                float scale = abs(cos(angle));
-                vec2 uvTo = center + vec2(uvFromCenter.x * scale, uvFromCenter.y);
-                colorFrom = texture(to, uvTo);
-                colorTo = colorFrom;
+                colorFrom = texture(to, scaledUV);
                 mixFactor = 1.0;
             }
+            colorTo = colorFrom;
             break;
         }
 
         case 12: // 纵向拉伸效果
         {
-            vec2 center = vec2(0.5, 0.5);
-            vec2 uvFromCenter = uv - center;
-
-            // 纵向拉伸：旧图在Y轴方向拉伸变窄，新图从窄变宽
-            float angle = progress * 3.14159;  // 0→π
-
-            // 决定显示哪张图：拉伸前半段显示旧图，后半段显示新图
-            if (angle < 1.5708) {  // π/2
-                // 前半段：显示旧图，逐渐变窄
-                float scale = abs(cos(angle));
-                vec2 uvFrom = center + vec2(uvFromCenter.x, uvFromCenter.y * scale);
-                colorFrom = texture(from, uvFrom);
-                colorTo = colorFrom;
+            vec2 offset = uv - CENTER;
+            float angle = progress * PI;
+            float scale = abs(cos(angle));
+            vec2 scaledUV = CENTER + vec2(offset.x, offset.y * scale);
+            
+            if (angle < HALF_PI) {
+                colorFrom = texture(from, scaledUV);
                 mixFactor = 0.0;
             } else {
-                // 后半段：显示新图，从窄变宽
-                float scale = abs(cos(angle));
-                vec2 uvTo = center + vec2(uvFromCenter.x, uvFromCenter.y * scale);
-                colorFrom = texture(to, uvTo);
-                colorTo = colorFrom;
+                colorFrom = texture(to, scaledUV);
                 mixFactor = 1.0;
             }
+            colorTo = colorFrom;
             break;
         }
 
@@ -239,122 +267,64 @@ void main() {
 
         case 14: // 扭曲呼吸
         {
-            vec2 center = vec2(0.5, 0.5);
-            vec2 uvOffset = uv - center;
-
-            // 前半段：旧图扭曲并水平压缩成一条垂直线
-            // 后半段：新图从垂直线反向扭曲并水平展开
-
-            if (progress < 0.5) {
-                // 前半段：显示旧图
-                float t = progress * 2.0;  // 0-1
-
-                // 水平压缩：1.0 → 0.02（压扁成线）
-                float scaleX = mix(1.0, 0.02, t);
-                float scaleY = 1.0;
-
-                // 扭曲角度：随时间增加，最多转0.5圈
-                float twistAngle = t * 6.28318 * 0.5;
-
-                // 先应用压缩，再应用扭曲
-                vec2 compressedUV = vec2(uvOffset.x * scaleX, uvOffset.y * scaleY);
-
-                // 转换为极坐标进行扭曲
-                float dist = length(compressedUV);
-                float angle = atan(compressedUV.y, compressedUV.x);
-
-                // 扭曲旋转
-                vec2 twistedUV = vec2(
-                    cos(angle + twistAngle) * dist,
-                    sin(angle + twistAngle) * dist
-                );
-
-                colorFrom = texture(from, center + twistedUV);
-                colorTo = colorFrom;
+            vec2 offset = uv - CENTER;
+            PhaseInfo phase = getPhase(progress);
+            
+            float scaleX = phase.isFirstHalf ? mix(1.0, 0.02, phase.t) : mix(0.02, 1.0, phase.t);
+            float twistAngle = (phase.isFirstHalf ? phase.t : (1.0 - phase.t)) * PI;
+            
+            vec2 compressedUV = vec2(offset.x * scaleX, offset.y);
+            float dist, angle;
+            toPolar(compressedUV, vec2(0.0), dist, angle);
+            
+            float finalAngle = phase.isFirstHalf ? angle + twistAngle : angle - twistAngle;
+            vec2 twistedUV = vec2(cos(finalAngle), sin(finalAngle)) * dist;
+            
+            if (phase.isFirstHalf) {
+                colorFrom = texture(from, CENTER + twistedUV);
                 mixFactor = 0.0;
             } else {
-                // 后半段：显示新图
-                float t = (progress - 0.5) * 2.0;  // 0-1
-
-                // 水平压缩：0.02 → 1.0（从线展开）
-                float scaleX = mix(0.02, 1.0, t);
-                float scaleY = 1.0;
-
-                // 扭曲角度：从0.5圈减少到0
-                float twistAngle = (1.0 - t) * 6.28318 * 0.5;
-
-                // 先应用压缩，再应用扭曲
-                vec2 compressedUV = vec2(uvOffset.x * scaleX, uvOffset.y * scaleY);
-
-                // 转换为极坐标进行扭曲
-                float dist = length(compressedUV);
-                float angle = atan(compressedUV.y, compressedUV.x);
-
-                // 扭曲旋转（反向）
-                vec2 twistedUV = vec2(
-                    cos(angle - twistAngle) * dist,
-                    sin(angle - twistAngle) * dist
-                );
-
-                colorFrom = texture(to, center + twistedUV);
-                colorTo = colorFrom;
+                colorFrom = texture(to, CENTER + twistedUV);
                 mixFactor = 1.0;
             }
-
+            colorTo = colorFrom;
             break;
         }
 
         case 15: // 涟漪扩散效果
         {
-            vec2 center = vec2(0.5, 0.5);
-            vec2 dir = normalize(uv - center);
-            float dist = distance(uv, center);
-
-            // 创建多个同心圆涟漪
-            float ripple = sin(dist * 30.0 - progress * 15.0) * 0.02 * sin(progress * 3.14159);
-
-            // 应用涟漪变形
+            float dist, angle;
+            toPolar(uv, CENTER, dist, angle);
+            vec2 dir = normalize(uv - CENTER);
+            
+            float ripple = sin(dist * 30.0 - progress * 15.0) * 0.02 * sin(progress * PI);
             vec2 uvRipple = uv + dir * ripple;
             colorFrom = texture(from, uvRipple);
             colorTo = texture(to, uvRipple);
-
-            // 涟漪波前从中心向外扩散
+            
             float waveRadius = progress * 0.9;
-            mixFactor = smoothstep(waveRadius, waveRadius - 0.1, dist);
-
+            mixFactor = 1.0 - smoothStep3(waveRadius - 0.1, waveRadius, dist);
             break;
         }
 
         case 16: // 鱼眼效果
         {
-            vec2 center = vec2(0.5, 0.5);
-            vec2 uvOffset = uv - center;
-            float dist = length(uvOffset);
-
-            if (progress < 0.5) {
-                // 前半段：旧图向中心凹陷成点
-                float t = progress * 2.0;  // 0-1
-                // 凹陷程度：power从1.0逐渐减少到0.1，让边缘像素向中心汇聚
-                float power = mix(1.0, 0.1, t);
-                float newDist = pow(dist, power);
-                vec2 fishEyeUV = center + normalize(uvOffset) * newDist;
-
+            vec2 offset = uv - CENTER;
+            float dist = length(offset);
+            PhaseInfo phase = getPhase(progress);
+            
+            float power = phase.isFirstHalf ? mix(1.0, 0.1, phase.t) : mix(0.1, 1.0, phase.t);
+            float newDist = pow(dist, power);
+            vec2 fishEyeUV = CENTER + normalize(offset) * newDist;
+            
+            if (phase.isFirstHalf) {
                 colorFrom = texture(from, fishEyeUV);
-                colorTo = colorFrom;
                 mixFactor = 0.0;
             } else {
-                // 后半段：新图从中心突出成图
-                float t = (progress - 0.5) * 2.0;  // 0-1
-                // 突出程度：power从0.1逐渐增加到1.0，从中心展开
-                float power = mix(0.1, 1.0, t);
-                float newDist = pow(dist, power);
-                vec2 fishEyeUV = center + normalize(uvOffset) * newDist;
-
                 colorFrom = texture(to, fishEyeUV);
-                colorTo = colorFrom;
                 mixFactor = 1.0;
             }
-
+            colorTo = colorFrom;
             break;
         }
 
@@ -438,128 +408,75 @@ void main() {
 
         case 19: // 反色效果
         {
-            // 计算反色
             vec4 invertedFrom = vec4(1.0 - colorFrom.rgb, colorFrom.a);
             vec4 invertedTo = vec4(1.0 - colorTo.rgb, colorTo.a);
-
-            if (progress < 0.5) {
-                // 前半段：旧图逐渐反色
-                float t = progress * 2.0;
-                colorFrom = mix(colorFrom, invertedFrom, t);
+            PhaseInfo phase = getPhase(progress);
+            
+            if (phase.isFirstHalf) {
+                colorFrom = mix(colorFrom, invertedFrom, phase.t);
                 mixFactor = 0.0;
             } else {
-                // 后半段：新图从反色逐渐恢复正常
-                float t = (progress - 0.5) * 2.0;
-                colorFrom = mix(invertedTo, colorTo, t);
+                colorFrom = mix(invertedTo, colorTo, phase.t);
                 colorTo = colorFrom;
                 mixFactor = 1.0;
             }
-
             break;
         }
 
         case 20: // 模糊渐变效果
         {
-            float blurAmount;
-
-            if (progress < 0.5) {
-                // 前半段：旧图逐渐模糊
-                float t = progress * 2.0;
-                blurAmount = t * 0.02;
-
-                // 简单盒式模糊
-                vec4 blurredColor = vec4(0.0);
-                int samples = 4;
-                for (int x = -samples; x <= samples; x++) {
-                    for (int y = -samples; y <= samples; y++) {
-                        vec2 offset = vec2(float(x), float(y)) * blurAmount;
-                        blurredColor += texture(from, uv + offset);
-                    }
-                }
-                colorFrom = blurredColor / float((samples * 2 + 1) * (samples * 2 + 1));
-                colorTo = colorFrom;
+            PhaseInfo phase = getPhase(progress);
+            float blurAmount = phase.isFirstHalf ? phase.t * 0.02 : (1.0 - phase.t) * 0.02;
+            
+            if (phase.isFirstHalf) {
+                colorFrom = boxBlur(from, uv, blurAmount, 4);
                 mixFactor = 0.0;
             } else {
-                // 后半段：新图从模糊逐渐清晰
-                float t = (progress - 0.5) * 2.0;
-                blurAmount = (1.0 - t) * 0.02;
-
-                // 简单盒式模糊
-                vec4 blurredColor = vec4(0.0);
-                int samples = 4;
-                for (int x = -samples; x <= samples; x++) {
-                    for (int y = -samples; y <= samples; y++) {
-                        vec2 offset = vec2(float(x), float(y)) * blurAmount;
-                        blurredColor += texture(to, uv + offset);
-                    }
-                }
-                colorFrom = blurredColor / float((samples * 2 + 1) * (samples * 2 + 1));
-                colorTo = colorFrom;
+                colorFrom = boxBlur(to, uv, blurAmount, 4);
                 mixFactor = 1.0;
             }
-
+            colorTo = colorFrom;
             break;
         }
 
         case 21: // 破碎效果
         {
-            vec2 center = vec2(0.5, 0.5);
-            vec2 uvOffset = uv - center;
-            float dist = length(uvOffset);
-            float angle = atan(uvOffset.y, uvOffset.x);
-
-            // 破碎参数
+            float dist, angle;
+            toPolar(uv, CENTER, dist, angle);
+            
             float numShards = 12.0;
-            float shardAngle = 2.0 * 3.14159 / numShards;
-            int shardIndex = int(mod(angle + 3.14159, 2.0 * 3.14159) / shardAngle);
-
-            // 随机偏移模拟破碎
-            float randomOffset = random(vec2(float(shardIndex), progress));
+            float shardAngle = TWO_PI / numShards;
+            int shardIndex = int(mod(angle + PI, TWO_PI) / shardAngle);
+            
+            float seed = fract(sin(float(shardIndex) * 12.9898) * 43758.5453);
             vec2 shardDir = vec2(cos(float(shardIndex) * shardAngle), sin(float(shardIndex) * shardAngle));
-
-            if (progress < 0.5) {
-                // 前半段：旧图破碎向外飞散
-                float t = progress * 2.0;
-                float flyDistance = t * 0.3 * randomOffset;
-                vec2 shatteredUV = uv + shardDir * flyDistance;
+            
+            PhaseInfo phase = getPhase(progress);
+            float flyDistance = (phase.isFirstHalf ? phase.t : (1.0 - phase.t)) * 0.3 * seed;
+            vec2 shatteredUV = uv + shardDir * flyDistance * (phase.isFirstHalf ? 1.0 : -1.0);
+            
+            if (phase.isFirstHalf) {
                 colorFrom = texture(from, shatteredUV);
-                colorTo = colorFrom;
                 mixFactor = 0.0;
             } else {
-                // 后半段：新图从碎片中重组
-                float t = (progress - 0.5) * 2.0;
-                float flyDistance = (1.0 - t) * 0.3 * randomOffset;
-                vec2 shatteredUV = uv - shardDir * flyDistance;
                 colorFrom = texture(to, shatteredUV);
-                colorTo = colorFrom;
                 mixFactor = 1.0;
             }
-
+            colorTo = colorFrom;
             break;
         }
 
         case 22: // 雷达扫描效果
         {
-            vec2 center = vec2(0.5, 0.5);
-            vec2 uvOffset = uv - center;
-            float dist = distance(uv, center);
-            float angle = atan(uvOffset.y, uvOffset.x);
-
-            // 雷达扫描线从中心旋转扫描，旋转360度（1圈）完成过渡
-            float scanAngle = progress * 6.28318;  // 旋转1圈（0到2π）
-
-            // 将角度映射到0-2π范围（从0开始，逆时针方向）
-            float normalizedAngle = mod(angle + 3.14159, 6.28318);
-
-            // 判断当前像素的角度是否在扫描线扫过的区域内
-            // 扫过的区域（0到scanAngle）：显示新图
-            // 未扫过的区域：显示旧图
-            mixFactor = smoothstep(0.0, 0.05, scanAngle - normalizedAngle);
-
-            // 采样两张图片
+            float dist, angle;
+            toPolar(uv, CENTER, dist, angle);
+            
+            float scanAngle = progress * TWO_PI;
+            float normalizedAngle = mod(angle + PI, TWO_PI);
+            
+            mixFactor = smoothStep3(0.0, 0.05, scanAngle - normalizedAngle);
             colorFrom = texture(from, uv);
             colorTo = texture(to, uv);
-
             break;
         }
 
@@ -678,72 +595,45 @@ void main() {
 
         case 24: // 火焰燃烧效果
         {
-            vec2 center = vec2(0.5, 0.5);
-            float distFromBottom = 1.0 - uv.y;  // 距离底部的距离
-
-            // 火焰从底部向上蔓延
+            float distFromBottom = 1.0 - uv.y;
             float flameHeight = progress * 1.2;
-
-            // 火焰边缘抖动
-            float flameJitter = sin(uv.x * 20.0 + progress * 10.0) * 0.02 * sin(progress * 3.14159);
+            float flameJitter = sin(uv.x * 20.0 + progress * 10.0) * 0.02 * sin(progress * PI);
             float flameEdge = flameHeight + flameJitter;
-
-            // 判断像素是否在火焰边缘附近（燃烧的旧图区域）
-            // burningZone: 1表示在燃烧边缘（火焰上方），0表示其他位置
-            float burningZone = smoothstep(flameEdge - 0.15, flameEdge, distFromBottom);
-            burningZone *= (1.0 - smoothstep(flameEdge, flameEdge + 0.05, distFromBottom));
-
-            // mixFactor控制新旧图片的混合：火焰下方显示旧图，上方显示新图
-            mixFactor = 1.0 - smoothstep(flameEdge - 0.05, flameEdge + 0.05, distFromBottom);
-
-            // 采样原始图片
+            
+            float burningZone = smoothStep3(flameEdge - 0.15, flameEdge, distFromBottom) *
+                               (1.0 - smoothStep3(flameEdge, flameEdge + 0.05, distFromBottom));
+            mixFactor = 1.0 - smoothStep3(flameEdge - 0.05, flameEdge + 0.05, distFromBottom);
+            
             colorFrom = texture(from, uv);
             colorTo = texture(to, uv);
-
-            // 只在燃烧的旧图区域添加火焰效果
+            
             if (burningZone > 0.01) {
-                // 火焰颜色渐变：底部红色 -> 中间橙色 -> 顶部黄色
-                vec3 fireColor = mix(vec3(1.0, 0.0, 0.0), vec3(1.0, 0.5, 0.0), smoothstep(0.0, 0.5, distFromBottom / flameEdge));
-                fireColor = mix(fireColor, vec3(1.0, 0.8, 0.2), smoothstep(0.5, 1.0, distFromBottom / flameEdge));
-
-                // 添加火焰闪烁
+                vec3 fireColor = mix(vec3(1.0, 0.0, 0.0), vec3(1.0, 0.5, 0.0), smoothStep3(0.0, 0.5, distFromBottom / flameEdge));
+                fireColor = mix(fireColor, vec3(1.0, 0.8, 0.2), smoothStep3(0.5, 1.0, distFromBottom / flameEdge));
                 float flicker = sin(uv.x * 30.0 + uv.y * 30.0 + progress * 20.0) * 0.5 + 0.5;
                 fireColor *= (0.8 + 0.4 * flicker);
-
-                // 只对旧图添加火焰效果
                 colorFrom.rgb += fireColor * 0.5 * burningZone;
             }
-
             break;
         }
 
         case 25: // 水墨晕染效果
         {
-            vec2 center = vec2(0.5, 0.5);
-            float dist = distance(uv, center);
-
-            // 水墨从中心晕染扩散
+            float dist = distance(uv, CENTER);
             float inkRadius = progress * 0.9;
-
-            // 晕染边缘不规则
-            float inkJitter = random(uv) * 0.05 * sin(progress * 3.14159);
+            float inkJitter = random(uv) * 0.05 * sin(progress * PI);
             float inkEdge = inkRadius + inkJitter;
-
-            mixFactor = smoothstep(inkEdge, inkEdge - 0.1, dist);
-
-            // 晕染区域显示新图，带水墨模糊
+            
+            mixFactor = smoothStep3(inkEdge - 0.1, inkEdge, dist);
             vec2 inkBlurUV = uv + random(uv * 10.0 + progress) * 0.01;
             colorFrom = texture(from, uv);
             colorTo = texture(to, inkBlurUV);
-
             break;
         }
 
         case 26: // 粒子爆炸效果
         {
-            vec2 center = vec2(0.5, 0.5);
-            vec2 uvOffset = uv - center;
-            float dist = length(uvOffset);
+            float dist = distance(uv, CENTER);
 
             // 粒子爆炸：旧图片碎裂成粒子向四周爆炸
             float particleSize = 0.05;  // 粒子大小（固定）
@@ -778,7 +668,7 @@ void main() {
 
             // 新图从中心逐渐显现
             float newRadius = progress * 0.9;
-            float distFromCenter = length(uvOffset);
+            float distFromCenter = distance(uv, CENTER);
             float newMask = 1.0 - smoothstep(newRadius - 0.1, newRadius + 0.1, distFromCenter);
 
             // 新图采样
@@ -2169,20 +2059,9 @@ void main() {
     }
 
 
-    // 确保透明区域显示背景色
-    if (colorFrom.a < 0.01) {
-        colorFrom = vec4(backgroundColor, 1.0);
-    } else {
-        colorFrom.a = 1.0;
-    }
-    if (colorTo.a < 0.01) {
-        colorTo = vec4(backgroundColor, 1.0);
-    } else {
-        colorTo.a = 1.0;
-    }
-
-    // 混合两张图片
-    vec4 finalColor = mix(colorFrom, colorTo, mixFactor);
-    finalColor.a *= qt_Opacity;
-    fragColor = finalColor;
+    // 确保透明区域显示背景色，混合最终输出
+    colorFrom = applyBackground(colorFrom, backgroundColor);
+    colorTo = applyBackground(colorTo, backgroundColor);
+    
+    fragColor = mix(colorFrom, colorTo, mixFactor) * qt_Opacity;
 }

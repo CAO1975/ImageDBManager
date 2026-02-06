@@ -4,6 +4,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Controls.Universal
 import QtQuick.Dialogs
+import "ColorUtils.js" as ColorUtils
 
 
 ApplicationWindow {
@@ -22,13 +23,11 @@ ApplicationWindow {
     Universal.theme: Universal.Dark
 
     // 自定义颜色属性，用于动态修改
-    property color customBackground: '#0d1a28'
-    property color customAccent: '#30638f'
+    property color customBackground: '#181925'
+    property color customAccent: '#645a87'
 
     // 全屏状态 - 现在只是控制UI布局，不是真正的全屏窗口
     property bool isFullscreen: false
-    // 记住窗口模式时的状态
-    property int windowedVisibility: Window.Windowed
 
     // 过渡设置属性
     property int transitionIndex: 0  // 0 = 随机
@@ -63,11 +62,11 @@ ApplicationWindow {
     // 过渡效果模型（共享）
     property var transitionModel: [
         "随机",
-        // 普通过渡效果（0-28）
+        // 普通过渡效果（0-31）
         "淡入淡出", "向左滑动", "向右滑动", "缩放", "淡入淡出+缩放",
         "向左旋转90°", "向右旋转90°", "向左旋转180°", "向右旋转180°", "上滑下滑", "下滑上滑",
-        "左下向右上", "右上向左下", "左上向右下", "右下向左上", "翻转", "反向翻转", "上下翻转", "上翻转", "缩放过渡", "对角线翻转", "反向对角线翻转", "顶端X轴翻转", "底端X轴翻转", "左侧Y轴翻转", "右侧Y轴翻转", "螺旋飞出飞入", "Y轴翻转2圈", "X轴翻转2圈",
-        // 着色器过渡效果（29-78）
+        "左下向右上", "右上向左下", "左上向右下", "右下向左上", "翻转", "反向翻转", "上下翻转", "上翻转", "弹性缩放", "对角线翻转", "反向对角线翻转", "顶端X轴翻转", "底端X轴翻转", "左侧Y轴翻转", "右侧Y轴翻转", "螺旋飞出飞入", "Y轴翻转2圈", "X轴翻转2圈", "钟摆摆动", "挤压（横向）", "挤压（纵向）",
+        // 着色器过渡效果（32-82）
         "溶解（着色器）", "马赛克（着色器）", "水波扭曲（着色器）", "从左向右擦除（着色器）", "从右向左擦除（着色器）",
         "从上向下擦除（着色器）", "从下向上擦除（着色器）", "X轴窗帘（着色器）", "Y轴窗帘（着色器）", "故障艺术（着色器）",
         "旋转效果（着色器）", "横向拉伸（着色器）", "纵向拉伸（着色器）", "百叶窗效果（着色器）", "扭曲呼吸（着色器）", "涟漪扩散（着色器）",
@@ -100,10 +99,9 @@ ApplicationWindow {
         }
     }
 
-    // 根据背景颜色计算合适的文字颜色
+    // 使用 ColorUtils.js 中的函数
     function getTextColor(backgroundColor) {
-        let brightness = 0.299 * backgroundColor.r + 0.587 * backgroundColor.g + 0.114 * backgroundColor.b
-        return brightness > 0.5 ? "#000000" : "#FFFFFF"
+        return ColorUtils.getTextColor(backgroundColor)
     }
 
     // 可复用组件：标题栏分隔符
@@ -117,7 +115,7 @@ ApplicationWindow {
         Layout.rightMargin: 8
     }
 
-    // 可复用组件：主题颜色选择按钮（带悬停效果）
+    // 可复用组件：主题颜色选择按钮（带悬停效果和点击反馈）
     component ThemeColorButton: Button {
         id: btn
         property color bgColor: window.customBackground
@@ -127,34 +125,36 @@ ApplicationWindow {
         Layout.preferredHeight: 28
         hoverEnabled: true
 
+        // 点击时缩小效果
+        scale: btn.down ? 0.95 : 1.0
+        Behavior on scale {
+            NumberAnimation { duration: 50 }
+        }
+
         background: Rectangle {
             id: btnBackground
-            color: btn.bgColor
+            // 点击时背景变暗，悬停时使用强调色，默认使用 bgColor
+            color: btn.down ? Qt.darker(btn.bgColor, 1.3) : (btn.hovered ? btn.hoverColor : btn.bgColor)
             border.color: window.customAccent
             border.width: 1
             radius: 4
 
             Behavior on color {
-                ColorAnimation { duration: 200 }
+                ColorAnimation { duration: 100 }
             }
         }
 
         contentItem: Text {
             id: btnText
             text: btn.text
-            color: getTextColor(btn.bgColor)
+            // 点击或悬停时文字变白
+            color: btn.down || btn.hovered ? "white" : getTextColor(btn.bgColor)
             font.pointSize: 11
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
-        }
 
-        onHoveredChanged: {
-            if (hovered) {
-                btnBackground.color = btn.hoverColor
-                btnText.color = "white"
-            } else {
-                btnBackground.color = btn.bgColor
-                btnText.color = getTextColor(btn.bgColor)
+            Behavior on color {
+                ColorAnimation { duration: 100 }
             }
         }
     }
@@ -166,6 +166,7 @@ ApplicationWindow {
         property string placeholderText: ""
 
         Layout.preferredHeight: 28
+        hoverEnabled: true
 
         contentItem: Text {
             text: root.displayText !== "" ? root.displayText : root.placeholderText
@@ -177,9 +178,16 @@ ApplicationWindow {
 
         background: Rectangle {
             color: window.customBackground
-            border.color: window.customAccent
-            border.width: 1
+            border.color: root.hovered ? Qt.lighter(window.customAccent, 1.3) : window.customAccent
+            border.width: root.hovered ? 2 : 1
             radius: 6
+
+            Behavior on border.color {
+                ColorAnimation { duration: 150 }
+            }
+            Behavior on border.width {
+                NumberAnimation { duration: 100 }
+            }
         }
 
         delegate: ItemDelegate {
@@ -263,7 +271,7 @@ ApplicationWindow {
         }
     }
 
-                // 使用共享的 ThemedRectangle 组件
+
 
     // 隐藏原生标题栏，添加支持透明背景的标志
     flags: Qt.Window | Qt.FramelessWindowHint | Qt.WindowTitleHint | 
@@ -442,8 +450,8 @@ ApplicationWindow {
         imageListContainer.SplitView.preferredWidth = parseInt(imageListWidth)
         
         // 读取自定义背景色和强调色
-        let bgColor = database.getSetting("CustomBackground", '#0d1a28')
-        let accentColor = database.getSetting("CustomAccent", '#30638f')
+        let bgColor = database.getSetting("CustomBackground", '#181925')
+        let accentColor = database.getSetting("CustomAccent", '#645a87')
         customBackground = bgColor
         customAccent = accentColor
     }
@@ -478,53 +486,28 @@ ApplicationWindow {
     }
 
     // 边缘调整大小（8个方向）- 只在窗口模式下可用
-    MouseArea { 
-        visible: !isFullscreen
-        height: 8; anchors { top: parent.top; left: parent.left; right: parent.right }
-        cursorShape: Qt.SizeVerCursor; z: 100
-        onPressed: function(mouse) { if (mouse.button === Qt.LeftButton) window.startSystemResize(Qt.TopEdge) }
-    }
-    MouseArea { 
-        visible: !isFullscreen
-        height: 8; anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
-        cursorShape: Qt.SizeVerCursor; z: 100
-        onPressed: function(mouse) { if (mouse.button === Qt.LeftButton) window.startSystemResize(Qt.BottomEdge) }
-    }
-    MouseArea { 
-        visible: !isFullscreen
-        width: 8; anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
-        cursorShape: Qt.SizeHorCursor; z: 100
-        onPressed: function(mouse) { if (mouse.button === Qt.LeftButton) window.startSystemResize(Qt.LeftEdge) }
-    }
-    MouseArea { 
-        visible: !isFullscreen
-        width: 8; anchors { right: parent.right; top: parent.top; bottom: parent.bottom }
-        cursorShape: Qt.SizeHorCursor; z: 100
-        onPressed: function(mouse) { if (mouse.button === Qt.LeftButton) window.startSystemResize(Qt.RightEdge) }
-    }
-    MouseArea { 
-        visible: !isFullscreen
-        width: 8; height: 8; anchors { top: parent.top; left: parent.left }
-        cursorShape: Qt.SizeFDiagCursor; z: 100
-        onPressed: function(mouse) { if (mouse.button === Qt.LeftButton) window.startSystemResize(Qt.TopEdge | Qt.LeftEdge) }
-    }
-    MouseArea { 
-        visible: !isFullscreen
-        width: 8; height: 8; anchors { top: parent.top; right: parent.right }
-        cursorShape: Qt.SizeBDiagCursor; z: 100
-        onPressed: function(mouse) { if (mouse.button === Qt.LeftButton) window.startSystemResize(Qt.TopEdge | Qt.RightEdge) }
-    }
-    MouseArea { 
-        visible: !isFullscreen
-        width: 8; height: 8; anchors { bottom: parent.bottom; left: parent.left }
-        cursorShape: Qt.SizeBDiagCursor; z: 100
-        onPressed: function(mouse) { if (mouse.button === Qt.LeftButton) window.startSystemResize(Qt.BottomEdge | Qt.LeftEdge) }
-    }
-    MouseArea { 
-        visible: !isFullscreen
-        width: 8; height: 8; anchors { bottom: parent.bottom; right: parent.right }
-        cursorShape: Qt.SizeFDiagCursor; z: 100
-        onPressed: function(mouse) { if (mouse.button === Qt.LeftButton) window.startSystemResize(Qt.BottomEdge | Qt.RightEdge) }
+    Repeater {
+        model: [
+            { height: 8, anchors: { top: parent.top, left: parent.left, right: parent.right }, cursor: Qt.SizeVerCursor, edge: Qt.TopEdge },
+            { height: 8, anchors: { bottom: parent.bottom, left: parent.left, right: parent.right }, cursor: Qt.SizeVerCursor, edge: Qt.BottomEdge },
+            { width: 8, anchors: { left: parent.left, top: parent.top, bottom: parent.bottom }, cursor: Qt.SizeHorCursor, edge: Qt.LeftEdge },
+            { width: 8, anchors: { right: parent.right, top: parent.top, bottom: parent.bottom }, cursor: Qt.SizeHorCursor, edge: Qt.RightEdge },
+            { width: 8, height: 8, anchors: { top: parent.top, left: parent.left }, cursor: Qt.SizeFDiagCursor, edge: Qt.TopEdge | Qt.LeftEdge },
+            { width: 8, height: 8, anchors: { top: parent.top, right: parent.right }, cursor: Qt.SizeBDiagCursor, edge: Qt.TopEdge | Qt.RightEdge },
+            { width: 8, height: 8, anchors: { bottom: parent.bottom, left: parent.left }, cursor: Qt.SizeBDiagCursor, edge: Qt.BottomEdge | Qt.LeftEdge },
+            { width: 8, height: 8, anchors: { bottom: parent.bottom, right: parent.right }, cursor: Qt.SizeFDiagCursor, edge: Qt.BottomEdge | Qt.RightEdge }
+        ]
+        delegate: MouseArea {
+            visible: !window.isFullscreen
+            width: modelData.width || 0
+            height: modelData.height || 0
+            anchors { top: modelData.anchors.top; bottom: modelData.anchors.bottom; left: modelData.anchors.left; right: modelData.anchors.right }
+            cursorShape: modelData.cursor
+            z: 100
+            onPressed: function(mouse) {
+                if (mouse.button === Qt.LeftButton) window.startSystemResize(modelData.edge)
+            }
+        }
     }
     
     // 主内容容器 - 实现圆角效果
@@ -549,7 +532,15 @@ ApplicationWindow {
             
             RowLayout {
                 anchors.fill: parent; anchors.margins: 8
-                
+
+                // 应用图标
+                Image {
+                    source: "qrc:/assets/AppIcon.png"
+                    Layout.preferredWidth: 20
+                    Layout.preferredHeight: 20
+                    fillMode: Image.PreserveAspectFit
+                }
+
                 // 左侧：窗口标题
                 Text {
                     text: window.title; color: getTextColor(window.customBackground)
@@ -847,19 +838,15 @@ ApplicationWindow {
                         customBackground: window.customBackground
                         customAccent: window.customAccent
                         
-                        onGroupSelected: {
+                        onGroupSelected: function(groupId) {
                             currentGroupId = groupId
                             groupPath = getFullGroupPath(groupId)
                             imageCount = updateImageCount(groupId)
                             window.currentImageId = -1
                             imageList.loadImages(groupId)
                         }
-                        
-                        Component.onCompleted: {
-                            initializeTitleBarInfo()
-                        }
-                        
-                        onGroupRightClicked: {
+
+                        onGroupRightClicked: function(groupId, groupName) {
                             contextMenuGroupId = groupId
                             contextMenuGroupName = groupName
                             groupContextMenu.popup()
@@ -1088,16 +1075,8 @@ ApplicationWindow {
                     anchors.centerIn: parent
                     spacing: 10
 
-                    // 工具栏按钮
-                    component ToolBarButton: ThemeColorButton {
-                    }
-
-                    // 工具栏ComboBox
-                    component ToolBarComboBox: StyledComboBox {
-                    }
-
                     // 过渡效果选择
-                    ToolBarComboBox {
+                    StyledComboBox {
                         id: fsTransitionComboBox
                         Layout.preferredWidth: 200
                         Layout.alignment: Qt.AlignVCenter
@@ -1121,7 +1100,7 @@ ApplicationWindow {
                     }
 
                     // 过渡时间选择
-                    ToolBarComboBox {
+                    StyledComboBox {
                         id: fsDurationComboBox
                         Layout.preferredWidth: 120
                         Layout.alignment: Qt.AlignVCenter
@@ -1145,7 +1124,7 @@ ApplicationWindow {
                     }
 
                     // 上一张按钮
-                    ToolBarButton {
+                    ThemeColorButton {
                         text: "上一张"
                         Layout.preferredWidth: 80
                         onClicked: {
@@ -1155,7 +1134,7 @@ ApplicationWindow {
                     }
 
                     // 下一张按钮
-                    ToolBarButton {
+                    ThemeColorButton {
                         text: "下一张"
                         Layout.preferredWidth: 80
                         onClicked: {
@@ -1165,7 +1144,7 @@ ApplicationWindow {
                     }
 
                     // 幻灯片播放按钮
-                    ToolBarButton {
+                    ThemeColorButton {
                         id: slideshowButton
                         text: "幻灯片"
                         Layout.preferredWidth: 80
@@ -1189,7 +1168,7 @@ ApplicationWindow {
                     }
 
                     // 幻灯片间隔时间选择
-                    ToolBarComboBox {
+                    StyledComboBox {
                         id: fsSlideshowIntervalComboBox
                         Layout.preferredWidth: 100
                         Layout.alignment: Qt.AlignVCenter
@@ -1218,7 +1197,7 @@ ApplicationWindow {
                     }
 
                     // 退出全屏按钮
-                    ToolBarButton {
+                    ThemeColorButton {
                         text: "退出全屏"
                         Layout.preferredWidth: 100
                         onClicked: window.exitFullscreen()
@@ -1310,7 +1289,7 @@ ApplicationWindow {
                 customBackground: window.customBackground
                 customAccent: window.customAccent
 
-                onGroupSelected: {
+                onGroupSelected: function(groupId) {
                     groupDialog.selectedGroupId = groupId;
                     groupDialog.selectedParentGroupId = groupId;
 
@@ -1640,7 +1619,7 @@ ApplicationWindow {
             
             // 提示文本
             Text {
-                text: isForImage ? "输入新的图片文件名" : "输入新的分组名称"
+                text: renameDialog.isForImage ? "输入新的图片文件名" : "输入新的分组名称"
                 color: Universal.foreground
                 font.pointSize: 12
                 horizontalAlignment: Text.AlignHCenter
@@ -1676,15 +1655,16 @@ ApplicationWindow {
         // 显示的消息文本
         function getMessage() {
             if (deleteType === "group") {
-                // 获取分组的子分组数量和图片数量
-                var subgroupCount = database.getSubgroupCount(itemId);
-                var imageCount = database.getImageCountForGroup(itemId);
-                
-                // 构建消息文本
+                // 构建基础消息
                 var msg = "确定要删除分组 \"" + itemName + "\" 吗？\n\n";
-                msg += "该分组下包含：\n";
-                msg += "- " + subgroupCount + " 个子分组\n";
-                msg += "- " + imageCount + " 张图片\n\n";
+                // 只有 database 可用时才获取统计信息
+                if (database !== null) {
+                    var subgroupCount = database.getSubgroupCount(itemId);
+                    var imageCount = database.getImageCountForGroup(itemId);
+                    msg += "该分组下包含：\n";
+                    msg += "- " + subgroupCount + " 个子分组\n";
+                    msg += "- " + imageCount + " 张图片\n\n";
+                }
                 msg += "删除后将无法恢复！";
                 return msg;
             } else {

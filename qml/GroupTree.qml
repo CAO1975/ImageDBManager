@@ -1,32 +1,24 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Layouts
 
 Item {
     property color customBackground: '#112233'
     property color customAccent: '#30638f'
     id: groupTree
 
-    // 可复用组件：主题化Rectangle
-    component ThemedRectangle: Rectangle {
-        property color bgColor: customBackground
-        property color accentColor: customAccent
-        property int borderWidth: 1
-        property real borderRadius: 8
-
-        color: bgColor
-        border.color: accentColor
-        border.width: borderWidth
-        radius: borderRadius
-    }
-
-    ThemedRectangle {
+    // 背景矩形
+    Rectangle {
         anchors.fill: parent
+        color: customBackground
+        border.color: customAccent
+        border.width: 1
+        radius: 8
         z: -1
     }
 
-    // 根据背景颜色计算合适的文字颜色
+    // 使用 ColorUtils.js 中的函数
     function getTextColor(backgroundColor) {
+        // 内联实现，避免循环依赖
         let brightness = 0.299 * backgroundColor.r + 0.587 * backgroundColor.g + 0.114 * backgroundColor.b
         return brightness > 0.5 ? "#000000" : "#FFFFFF"
     }
@@ -51,8 +43,6 @@ Item {
     
     // 加载分组数据
     function loadGroups() {
-        console.log("loadGroups called");
-        
         // 保存当前选中的分组ID
         var previouslySelectedId = currentSelectedGroupId;
         
@@ -71,7 +61,6 @@ Item {
         
         // 从数据库加载分组数据
         var groups = database.getAllGroups()
-        console.log("Loading groups from database, raw data:", JSON.stringify(groups))
         
         if (groups && groups.length > 0) {
             // 构建完整的树结构
@@ -105,7 +94,6 @@ Item {
             
             // 更新全局的父子关系映射
             groupTree.groupParentMap = newParentMap
-            console.log("Generated group parent map:", JSON.stringify(newParentMap))
             
             // 构建模型
             for (var j = 0; j < groupList.length; j++) {
@@ -115,8 +103,6 @@ Item {
                 // 确保ID是数字类型，并从expandedStates中读取状态
                 var groupIdNum = Number(group.id)
                 var isExpanded = groupTree.expandedStates[groupIdNum] !== undefined ? groupTree.expandedStates[groupIdNum] : true
-                
-                console.log("Adding group to model: ", group.name, "ID:", groupIdNum, "Depth:", depth, "HasChildren:", hasChildren, "Expanded:", isExpanded);
                 
                 // 添加当前分组到模型
                 mainGroupListModel.append({
@@ -130,7 +116,6 @@ Item {
                 
                 // 如果有子节点且当前节点是展开的，则递归添加子节点
                 if (hasChildren && isExpanded) {
-                    console.log("Recursively adding children for group:", group.name);
                     buildTree(group.children, depth + 1, groupIdNum)
                 }
             }
@@ -138,12 +123,7 @@ Item {
             
             // 开始构建树
             buildTree(groups, 0, 0)
-        } else {
-            console.log("No groups found in database")
         }
-        
-        console.log("Final model has", mainGroupListModel.count, "items");
-        console.log("Loaded groups, expandedStates:", JSON.stringify(groupTree.expandedStates));
         
         // 恢复或调整选中状态
         updateSelectionAfterLoad(previouslySelectedId);
@@ -151,8 +131,6 @@ Item {
     
     // 更新选中状态
     function updateSelectionAfterLoad(previouslySelectedId) {
-        console.log("Updating selection after load, previously selected ID:", previouslySelectedId, "foldingGroupId:", foldingGroupId);
-        
         // 查找之前选中的分组是否在当前模型中
         var foundIndex = -1;
         for (var i = 0; i < mainGroupListModel.count; i++) {
@@ -161,21 +139,17 @@ Item {
                 break;
             }
         }
-        
+
         // 如果找到了之前选中的分组，设置为当前选中项
         if (foundIndex !== -1) {
-            console.log("Found previously selected group, setting index:", foundIndex);
             groupListView.currentIndex = foundIndex;
             currentSelectedGroupId = previouslySelectedId;
-        } 
+        }
         // 如果没找到，且有正在折叠的分组ID
         else if (foldingGroupId !== -1) {
-            console.log("Previously selected group not found, checking folding operation");
-            
             // 查找被折叠分组在模型中的位置
             for (var j = 0; j < mainGroupListModel.count; j++) {
                 if (mainGroupListModel.get(j).id === foldingGroupId) {
-                    console.log("Found folding group in model, selecting it as fallback");
                     groupListView.currentIndex = j;
                     currentSelectedGroupId = foldingGroupId;
                     groupTree.groupSelected(foldingGroupId);
@@ -184,7 +158,7 @@ Item {
                     return;
                 }
             }
-            
+
             // 重置foldingGroupId
             foldingGroupId = -1;
         }
@@ -192,38 +166,32 @@ Item {
     
     // 切换分组展开状态
     function toggleGroupExpanded(groupId) {
-        console.log("Toggling group expanded state for group ID:", groupId, "currentSelectedGroupId:", currentSelectedGroupId);
-        
         // 确保groupId是数字类型
         groupId = Number(groupId)
-        
+
         // 获取当前分组的展开状态，默认为true
         var currentState = groupTree.expandedStates[groupId] !== undefined ? groupTree.expandedStates[groupId] : true
-        
+
         // 切换当前分组的展开状态
         var newExpandedState = !currentState
-        
+
         // 创建新的对象以确保QML能检测到属性变化
         var newStates = {}
         for (var key in groupTree.expandedStates) {
             newStates[key] = groupTree.expandedStates[key]
         }
         newStates[groupId] = newExpandedState
-        
+
         // 保存新的展开状态到expandedStates中
         groupTree.expandedStates = newStates
-        
-        console.log("Group " + groupId + " new expanded state:", newExpandedState);
-        console.log("Updated expandedStates:", JSON.stringify(groupTree.expandedStates));
-        
+
         // 如果是折叠操作，保存当前正在折叠的分组ID
         if (!newExpandedState) {
             foldingGroupId = groupId;
-            console.log("Set foldingGroupId to:", groupId, "for collapse operation");
         } else {
             foldingGroupId = -1;
         }
-        
+
         // 重新加载分组数据，应用新的展开状态
         loadGroups()
     }
@@ -305,22 +273,19 @@ Item {
                 // 捕获所有按钮的点击事件
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 
-                onClicked: {
+                onClicked: function(mouse) {
                     // 只处理左键点击
                     if (mouse.button === Qt.LeftButton) {
                         // 计算按钮的 X 坐标范围
                         var buttonXStart = model.depth * 20
                         var buttonXEnd = buttonXStart + (model.hasChildren ? 20 : 0)
-                        
+
                         // 判断是否点击在展开/折叠按钮上
                         if (model.hasChildren && mouse.x >= buttonXStart && mouse.x <= buttonXEnd) {
-                            console.log(">>> Expand/collapse button clicked for group ID:", model.id, "Name:", model.name);
-                            console.log(">>> Current expanded state:", model.expanded);
                             // 切换分组展开状态
                             groupTree.toggleGroupExpanded(model.id)
                         } else {
                             // 否则认为是分组项点击
-                            console.log(">>> Group item clicked, ID:", model.id, "Name:", model.name);
                             groupListView.currentIndex = index
                             // 只有当点击的分组ID与当前选中的分组ID不同时，才发送分组选择信号
                             if (model.id !== currentSelectedGroupId) {
@@ -332,12 +297,11 @@ Item {
                         }
                     }
                 }
-                
+
                 // 处理右键点击
-                onReleased: {
+                onReleased: function(mouse) {
                     if (mouse.button === Qt.RightButton) {
                         // 所有分组（包括未分组）都可以右键
-                        console.log(">>> Right clicked on group ID:", model.id, "Name:", model.name);
                         // 发送右键点击信号给父组件
                         groupTree.groupRightClicked(model.id, model.name)
                     }
@@ -355,7 +319,13 @@ Item {
         delegate: groupDelegate
         clip: true
 
-        ScrollBar.vertical: ScrollBar {
+        ScrollBar.vertical: styledScrollBar.createObject(groupListView)
+    }
+
+    // 可复用组件：主题化ScrollBar
+    Component {
+        id: styledScrollBar
+        ScrollBar {
             width: 8
             policy: ScrollBar.AlwaysOn
             active: true
@@ -372,10 +342,8 @@ Item {
     
     // 组件加载完成后初始化数据
     Component.onCompleted: {
-        console.log("GroupTree Component.onCompleted called");
         // 初始化expandedStates为空对象
         groupTree.expandedStates = ({})
-        console.log("Initialized expandedStates:", JSON.stringify(groupTree.expandedStates));
         // 加载分组数据
         loadGroups()
     }

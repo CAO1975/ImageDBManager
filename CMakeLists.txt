@@ -62,12 +62,15 @@ qt_add_qml_module(${PROJECT_NAME}
         qml/GroupTree.qml
         qml/ImageList.qml
         qml/ImageViewer.qml
+    RESOURCES
+        qml/ColorUtils.js
 )
 
 qt_add_resources(${PROJECT_NAME} "image_resources"
     PREFIX "/assets"
     FILES
         shaders/qsb/transitions.frag.qsb
+        AppIcon.png
 )
 
 # 启用QML编译器，减少运行时依赖和提高性能
