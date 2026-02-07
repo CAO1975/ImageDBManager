@@ -1,3 +1,16 @@
+/**
+ * @file database.h
+ * @brief 数据库管理类 - 处理所有数据持久化操作
+ *
+ * 功能包括：
+ * - 图片的增删改查（存储为 BLOB）
+ * - 多级分组管理（树形结构）
+ * - 异步导入/导出（多线程）
+ * - 用户设置存储
+ *
+ * 数据库文件：程序目录下的 ImageCollection.db (SQLite)
+ */
+
 #ifndef DATABASE_H
 #define DATABASE_H
 

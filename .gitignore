@@ -1,3 +1,8 @@
+# 项目临时文件
+windeployqt拷贝依赖.txt
+着色器过渡实现说明.md
+
+# 构建目录
 build/cmake_install.cmake
 build/CMakeCache.txt
 build/imagedbmanager_qmltyperegistrations.cpp

@@ -586,7 +586,21 @@ ApplicationWindow {
                 // 右侧：窗口控制按钮
                 RowLayout {
                     Layout.alignment: Qt.AlignRight; spacing: 4
-                    
+
+                    // 关于按钮
+                    Rectangle {
+                        id: aboutButton
+                        width: 28; height: 28; radius: 6; color: "transparent"
+                        Text { text: "?"; color: getTextColor(window.customBackground); font.pointSize: 12; anchors.centerIn: parent }
+
+                        MouseArea {
+                            anchors.fill: parent; hoverEnabled: true
+                            onEntered: aboutButton.color = window.customAccent
+                            onExited: aboutButton.color = "transparent"
+                            onClicked: aboutDialog.open()
+                        }
+                    }
+
                     Rectangle {
                         id: minButton
                         width: 28; height: 28; radius: 6; color: "transparent"
@@ -629,9 +643,9 @@ ApplicationWindow {
             }
             
             MouseArea {
-                width: parent.width - 90; height: parent.height; anchors.left: parent.left
+                width: parent.width - 130; height: parent.height; anchors.left: parent.left
                 acceptedButtons: Qt.LeftButton | Qt.RightButton; z: 2
-                
+
                 onPressed: function(mouse) {
                     if (mouse.button === Qt.LeftButton) window.startSystemMove()
                     else if (mouse.button === Qt.RightButton) window.startSystemMenu()
@@ -2052,6 +2066,53 @@ ApplicationWindow {
 
         onAccepted: {
             window.customAccent = selectedColor
+        }
+    }
+
+    // 关于对话框
+    Dialog {
+        id: aboutDialog
+        title: "关于"
+        anchors.centerIn: parent
+        standardButtons: Dialog.Ok
+
+        width: 480
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 20
+            spacing: 15
+
+            Text {
+                text: "ImageDBManager v1.0\n支持系统：Windows 10 及以上版本"
+                font.pointSize: 16
+                font.bold: true
+                color: window.customAccent
+                horizontalAlignment: Text.AlignHCenter
+                Layout.fillWidth: true
+            }
+
+            Text {
+                text: "一款图片数据库管理工具，支持分组管理、图片导入导出、全屏浏览及幻灯片播放。内置 80+ 种炫酷的流畅高性能过渡效果（支持 GPU 加速），支持自定义主题配色，助您高效管理和欣赏图片收藏。\n\n导入的图片将保存至程序所在目录的 ImageCollection.db 数据库文件中，请妥善保管和定期备份此文件，避免数据丢失。"
+                font.pointSize: 11
+                color: getTextColor(window.customBackground)
+                wrapMode: Text.WordWrap
+                horizontalAlignment: Text.AlignHCenter
+                Layout.fillWidth: true
+                Layout.preferredWidth: 420
+            }
+
+            Text {
+                text: "本软件使用了 Qt 框架。如果您需要替换 Qt 库，请联系我QQ：1920867856获取解包版本或指导。本软件采用虚拟化打包技术分发，但仍遵循 LGPL 动态链接条款。"
+                font.pointSize: 11
+                color: getTextColor(window.customBackground)
+                wrapMode: Text.WordWrap
+                horizontalAlignment: Text.AlignHCenter
+                Layout.fillWidth: true
+                Layout.preferredWidth: 420
+            }
+
+            Item { Layout.fillHeight: true }
         }
     }
 }

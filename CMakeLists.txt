@@ -1,4 +1,7 @@
-cmake_minimum_required(VERSION 3.30.5)  # 降低版本要求
+# ImageDBManager CMake 构建配置
+# 要求 CMake 3.30.5+ 和 Qt 6.x
+
+cmake_minimum_required(VERSION 3.30.5)
 project(ImageDBManager VERSION 1.0 LANGUAGES CXX)
 
 # 设置并行构建线程数
