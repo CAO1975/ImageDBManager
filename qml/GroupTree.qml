@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import "ColorUtils.js" as ColorUtils
 
 Item {
     property color customBackground: '#112233'
@@ -14,13 +15,6 @@ Item {
         border.width: 1
         radius: 8
         z: -1
-    }
-
-    // 使用 ColorUtils.js 中的函数
-    function getTextColor(backgroundColor) {
-        // 内联实现，避免循环依赖
-        let brightness = 0.299 * backgroundColor.r + 0.587 * backgroundColor.g + 0.114 * backgroundColor.b
-        return brightness > 0.5 ? "#000000" : "#FFFFFF"
     }
 
     // 定义信号，用于通知父组件选择了分组
@@ -257,7 +251,7 @@ Item {
                     width: parent.width - x
                     height: 24
                     text: model.name
-                    color: groupListView.currentIndex === index ? "#E8F4FD" : getTextColor(customBackground)
+                    color: groupListView.currentIndex === index ? "#E8F4FD" : ColorUtils.getTextColor(customBackground)
                     font.pointSize: 12
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight  // 文本过长时显示省略号

@@ -86,17 +86,6 @@ PhaseInfo getPhase(float p) {
     return info;
 }
 
-// 球体投影UV计算
-vec2 sphereProjectUV(vec2 uv, vec2 center, float dist, float angle, float rotation) {
-    float maxDist = 0.35;
-    if (dist > maxDist * 1.1) return uv;
-    
-    float normalizedDist = dist / maxDist;
-    float sphereHeight = sqrt(1.0 - normalizedDist * normalizedDist);
-    float projectedDist = dist * sphereHeight * 1.2;
-    return center + vec2(cos(angle + rotation), sin(angle + rotation)) * projectedDist;
-}
-
 // 确保透明区域显示背景色
 vec4 applyBackground(vec4 color, vec3 bg) {
     if (color.a < 0.01) return vec4(bg, 1.0);
@@ -2008,15 +1997,6 @@ void main() {
                 mixFactor = 1.0;
             }
 
-            // 添加马赛克块边缘效果
-            float distFromCenter = length(tileUV);
-            float edgeMask = smoothstep(tileSize * 0.45, tileSize * 0.5, distFromCenter);
-
-            // 边缘高光（随进度变化颜色）
-            vec3 edgeColor = mix(vec3(0.5, 0.7, 1.0), vec3(1.0, 0.6, 0.3), localProgress);
-            colorFrom.rgb = mix(colorFrom.rgb, edgeColor, edgeMask * 0.2);
-            colorTo.rgb = mix(colorTo.rgb, edgeColor, edgeMask * 0.2);
-
             break;
         }
 
@@ -2048,6 +2028,78 @@ void main() {
                 colorFrom.rgb += vec3(0.3, 0.5, 0.8) * (shine - 0.8) * 0.5;
                 colorTo.rgb += vec3(0.3, 0.5, 0.8) * (shine - 0.8) * 0.5;
             }
+            break;
+        }
+
+        case 51: // 马赛克飞散 - 旧图块向外飞散消失，新图块向内聚合显现
+        {
+            float gridSize = 10.0;
+            float tileSize = 1.0 / gridSize;
+            
+            // 遍历所有块，找到覆盖当前uv的块
+            vec4 resultColor = vec4(0.0);
+            
+            for (float i = 0.0; i < gridSize; i += 1.0) {
+                for (float j = 0.0; j < gridSize; j += 1.0) {
+                    vec2 gridIdx = vec2(i, j);
+                    vec2 tileCenter = (gridIdx + 0.5) * tileSize;
+                    
+                    // 该块的随机属性
+                    float seed = random(gridIdx);
+                    float flyAngle = seed * 6.28318;
+                    float flySpeed = 0.6 + seed * 0.6;
+                    float delay = seed * 0.15;
+                    
+                    // 块进度
+                    float blockProg = clamp((progress - delay) / (1.0 - delay), 0.0, 1.0);
+                    
+                    // 旧图阶段：块向外飞散 (0-0.5)
+                    if (progress < 0.55) {
+                        float flyDist = blockProg * flySpeed;
+                        vec2 flyOffset = vec2(cos(flyAngle), sin(flyAngle)) * flyDist;
+                        vec2 scatteredPos = tileCenter + flyOffset;
+                        
+                        // 检查当前uv是否在这个飞散后的块内
+                        vec2 delta = uv - scatteredPos;
+                        if (abs(delta.x) < tileSize * 0.5 && abs(delta.y) < tileSize * 0.5) {
+                            // 计算采样位置
+                            vec2 localUV = (delta / tileSize) + 0.5;
+                            vec2 samplePos = gridIdx * tileSize + localUV * tileSize;
+                            
+                            float fade = 1.0 - smoothstep(0.2, 0.8, blockProg);
+                            resultColor = texture(from, samplePos) * fade;
+                        }
+                    }
+                    
+                    // 新图阶段：块向内聚合 (0.45-1.0)
+                    if (progress > 0.45) {
+                        // 反向：从外向内
+                        float gatherProg = 1.0 - blockProg;
+                        float gatherDist = gatherProg * flySpeed;
+                        vec2 gatherOffset = vec2(cos(flyAngle), sin(flyAngle)) * gatherDist;
+                        vec2 gatheredPos = tileCenter + gatherOffset;
+                        
+                        // 检查当前uv是否在这个聚合中的块内
+                        vec2 delta = uv - gatheredPos;
+                        if (abs(delta.x) < tileSize * 0.5 && abs(delta.y) < tileSize * 0.5) {
+                            // 计算采样位置
+                            vec2 localUV = (delta / tileSize) + 0.5;
+                            vec2 samplePos = gridIdx * tileSize + localUV * tileSize;
+                            
+                            float fade = smoothstep(0.2, 0.7, blockProg);
+                            vec4 newCol = texture(to, samplePos) * fade;
+                            
+                            // 混合
+                            resultColor = mix(resultColor, newCol, fade);
+                        }
+                    }
+                }
+            }
+            
+            mixFactor = progress;
+            colorFrom = resultColor;
+            colorTo = resultColor;
+            
             break;
         }
 

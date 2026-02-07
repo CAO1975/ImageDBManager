@@ -2,6 +2,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "ColorUtils.js" as ColorUtils
 
 Item {
     property color customBackground: '#112233'
@@ -16,12 +17,6 @@ Item {
         border.width: 1
         radius: 8
         z: -1
-    }
-
-    // 使用内联实现（避免循环依赖）
-    function getTextColor(backgroundColor) {
-        let brightness = 0.299 * backgroundColor.r + 0.587 * backgroundColor.g + 0.114 * backgroundColor.b
-        return brightness > 0.5 ? "#000000" : "#FFFFFF"
     }
 
     // 导航函数：根据滚轮方向切换图片
@@ -235,7 +230,7 @@ Item {
                     elide: Text.ElideRight
                     verticalAlignment: Text.AlignVCenter
 
-                    color: model.id === selectedImageId ? getTextColor(customAccent) : getTextColor(customBackground)
+                    color: model.id === selectedImageId ? ColorUtils.getTextColor(customAccent) : ColorUtils.getTextColor(customBackground)
                 }
             }
         }

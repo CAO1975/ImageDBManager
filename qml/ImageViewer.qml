@@ -72,39 +72,7 @@ Item {
     // 添加着色器过渡相关属性
     property int shaderEffectType: 0  // 0 = 溶解
     
-    // 暂停所有动画（用于全屏切换时）
-    function pauseAllAnimations() {
-        if (fadeAnimation.running) fadeAnimation.pause()
-        if (slideLeftAnimation.running) slideLeftAnimation.pause()
-        if (slideRightAnimation.running) slideRightAnimation.pause()
-        if (scaleAnimation.running) scaleAnimation.pause()
-        if (fadeScaleAnimation.running) fadeScaleAnimation.pause()
-        if (rotateAnimation.running) rotateAnimation.pause()
-        if (rotateRightAnimation.running) rotateRightAnimation.pause()
-        if (rotateLeft180Animation.running) rotateLeft180Animation.pause()
-        if (rotateRight180Animation.running) rotateRight180Animation.pause()
-        if (slideUpDownAnimation.running) slideUpDownAnimation.pause()
-        if (slideDownUpAnimation.running) slideDownUpAnimation.pause()
-        if (slideLeftDownToRightUpAnimation.running) slideLeftDownToRightUpAnimation.pause()
-        if (slideRightUpToLeftDownAnimation.running) slideRightUpToLeftDownAnimation.pause()
-        if (slideLeftUpToRightDownAnimation.running) slideLeftUpToRightDownAnimation.pause()
-        if (slideRightDownToLeftUpAnimation.running) slideRightDownToLeftUpAnimation.pause()
-        if (flipAnimation.running) flipAnimation.pause()
-        if (flipReverseAnimation.running) flipReverseAnimation.pause()
-        if (flipXDownAnimation.running) flipXDownAnimation.pause()
-        if (flipXUpAnimation.running) flipXUpAnimation.pause()
-        if (flipXTopAnimation.running) flipXTopAnimation.pause()
-        if (flipXBottomAnimation.running) flipXBottomAnimation.pause()
-        if (scaleTransitionAnimation.running) scaleTransitionAnimation.pause()
-        if (flipDiagonalAnimation.running) flipDiagonalAnimation.pause()
-        if (flipDiagonalReverseAnimation.running) flipDiagonalReverseAnimation.pause()
-        if (flipYLeftAnimation.running) flipYLeftAnimation.pause()
-        if (flipYRightAnimation.running) flipYRightAnimation.pause()
-        if (spiralFlyAnimation.running) spiralFlyAnimation.pause()
-        updateTimer.stop()
-    }
-
-    // 恢复/停止所有动画（用于退出全屏时）
+    // 停止所有动画（用于退出全屏或打断过渡时）
     function stopAllAnimations() {
         fadeAnimation.stop()
         slideLeftAnimation.stop()
@@ -133,11 +101,13 @@ Item {
         flipYLeftAnimation.stop()
         flipYRightAnimation.stop()
         spiralFlyAnimation.stop()
-        flipScaleAnimation.stop()
-        flipScaleXAnimation.stop()
         pendulumAnimation.stop()
         horizontalRollAnimation.stop()
         verticalRollAnimation.stop()
+        flipScaleAnimation.stop()
+        flipScaleXAnimation.stop()
+        quadFlipAnimation.stop()
+        venetianFlipAnimation.stop()
         updateTimer.stop()
     }
 
@@ -170,11 +140,12 @@ Item {
     
     // 监听 currentImageId 变化，自动加载图片
     onCurrentImageIdChanged: {
-        // 只有当ID有效且不是当前正在显示的图片时才加载
-        if (currentImageId !== -1 && currentImageId !== newImageId) {
+        // 只有当ID有效时才加载
+        if (currentImageId !== -1) {
             // 检查currentImage的URL是否匹配当前ID
             var expectedUrl = "image://imageprovider/" + currentImageId + "/original"
-            if (currentImage !== expectedUrl || nextImage !== expectedUrl) {
+            // 如果当前显示的图片不是期望的图片，或者正在过渡中，则需要加载
+            if (currentImage !== expectedUrl || transitioning) {
                 // 只有可见时才执行过渡动画，不可见时静默加载（不执行动画）
                 if (visible) {
                     loadImageWithTransition(currentImageId)
@@ -256,8 +227,8 @@ Item {
         // 选择过渡效果
         var selectedTransition = transitionType
         if (selectedTransition === -1) {
-            // 随机选择0-82（所有83个过渡效果）
-            selectedTransition = Math.floor(Math.random() * 83)
+            // 随机选择0-85（所有86个过渡效果：0-33普通动画，34-85着色器）
+            selectedTransition = Math.floor(Math.random() * 86)
         }
         
         resetTransform()
@@ -277,13 +248,13 @@ Item {
         currentImageItem.source = currentImage || ""
         nextImageItem.source = nextImage || ""
         
-        // 着色器过渡
-        if (selectedTransition >= 32 && selectedTransition <= 82) {
+        // 着色器过渡（34-85）
+        if (selectedTransition >= 34 && selectedTransition <= 85) {
             nextImageItem.opacity = 1.0
             currentImageItem.visible = true
             nextImageItem.visible = true
 
-            var shaderEffectIndex = selectedTransition - 32
+            var shaderEffectIndex = selectedTransition - 34
             shaderEffectType = shaderEffectIndex
             shaderTransition.visible = true
             currentImageItem.opacity = 1.0
@@ -332,6 +303,8 @@ Item {
                 case 29: pendulumAnimation.start(); break
                 case 30: horizontalRollAnimation.start(); break
                 case 31: verticalRollAnimation.start(); break
+                case 32: quadFlipAnimation.start(); break
+                case 33: venetianFlipAnimation.start(); break
                 default: fadeAnimation.start(); break
             }
         }
@@ -390,6 +363,12 @@ Item {
         nextImageItem.visible = false  // 隐藏下一张图片
         currentImageItem.opacity = 1.0
         nextImageItem.opacity = 0.0  // 转换结束后隐藏下一张图片
+
+        // 重置四分屏容器
+        quadFlipContainer.visible = false
+
+        // 重置百叶窗容器
+        venetianFlipContainer.visible = false
     }
     
     // UI结构 - 背景已在组件顶部定义，包含圆角和边框
@@ -1563,23 +1542,6 @@ Item {
                 duration: transitionDuration / 2.5
                 easing.type: Easing.InCubic
             }
-            // 螺旋轨迹（使用正弦曲线模拟自然弧线）
-            NumberAnimation {
-                target: currentImageItem
-                property: "x"
-                from: 0
-                to: 0
-                duration: transitionDuration / 2.5
-                easing.type: Easing.InOutSine
-            }
-            NumberAnimation {
-                target: currentImageItem
-                property: "y"
-                from: 0
-                to: 0
-                duration: transitionDuration / 2.5
-                easing.type: Easing.InOutSine
-            }
         }
 
         // 第三阶段：新图片飞入（从高速旋转减速，包含惯性摆动，无停顿）
@@ -2116,6 +2078,768 @@ Item {
         onRunningChanged: {
             if (!running && transitioning) {
                 endTransition()
+            }
+        }
+    }
+
+    // 四分屏随机翻转动画 - 图片分成4个区域，每个区域随机X轴或Y轴翻转
+    // 每个区域作为一张双面卡片整体翻转：0-90°显示旧图，90-180°显示新图
+    SequentialAnimation {
+        id: quadFlipAnimation
+
+        // 初始化四个区域的随机翻转轴和翻转方向
+        ScriptAction {
+            script: {
+                // 随机决定每个区域是X轴翻转(1)还是Y轴翻转(0)
+                quadFlipAnimation.quad1Axis = Math.random() > 0.5 ? 1 : 0
+                quadFlipAnimation.quad2Axis = Math.random() > 0.5 ? 1 : 0
+                quadFlipAnimation.quad3Axis = Math.random() > 0.5 ? 1 : 0
+                quadFlipAnimation.quad4Axis = Math.random() > 0.5 ? 1 : 0
+
+                // 随机决定每个区域的翻转方向：1表示正向(0->180)，-1表示反向(0->-180)
+                quadFlipAnimation.quad1Direction = Math.random() > 0.5 ? 1 : -1
+                quadFlipAnimation.quad2Direction = Math.random() > 0.5 ? 1 : -1
+                quadFlipAnimation.quad3Direction = Math.random() > 0.5 ? 1 : -1
+                quadFlipAnimation.quad4Direction = Math.random() > 0.5 ? 1 : -1
+
+                // 设置各容器区域的旋转轴
+                quad1Container.rotationAxis.x = quadFlipAnimation.quad1Axis
+                quad1Container.rotationAxis.y = 1 - quadFlipAnimation.quad1Axis
+                quad1Container.rotationAxis.z = 0
+                quad2Container.rotationAxis.x = quadFlipAnimation.quad2Axis
+                quad2Container.rotationAxis.y = 1 - quadFlipAnimation.quad2Axis
+                quad2Container.rotationAxis.z = 0
+                quad3Container.rotationAxis.x = quadFlipAnimation.quad3Axis
+                quad3Container.rotationAxis.y = 1 - quadFlipAnimation.quad3Axis
+                quad3Container.rotationAxis.z = 0
+                quad4Container.rotationAxis.x = quadFlipAnimation.quad4Axis
+                quad4Container.rotationAxis.y = 1 - quadFlipAnimation.quad4Axis
+                quad4Container.rotationAxis.z = 0
+
+                // 设置各容器区域的翻转方向
+                quad1Container.rotationDirection = quadFlipAnimation.quad1Direction
+                quad2Container.rotationDirection = quadFlipAnimation.quad2Direction
+                quad3Container.rotationDirection = quadFlipAnimation.quad3Direction
+                quad4Container.rotationDirection = quadFlipAnimation.quad4Direction
+
+                // 重置容器旋转角度
+                quad1Container.rotationAngle = 0
+                quad2Container.rotationAngle = 0
+                quad3Container.rotationAngle = 0
+                quad4Container.rotationAngle = 0
+
+                // 初始可见性：正面旧图可见，背面新图不可见
+                quadCurrent1.visible = true
+                quadCurrent2.visible = true
+                quadCurrent3.visible = true
+                quadCurrent4.visible = true
+                quadNext1.visible = false
+                quadNext2.visible = false
+                quadNext3.visible = false
+                quadNext4.visible = false
+
+                // 隐藏原图避免背景显示
+                currentImageItem.visible = false
+
+                // 显示四分屏容器
+                quadFlipContainer.visible = true
+            }
+        }
+
+        // 四个区域翻转动画（带错位延迟）- 每个区域作为整体双面卡片翻转
+        // 翻转轴(X/Y)和翻转方向(正向/反向)都是随机的
+        // 通过调整旋转轴的方向来实现反向翻转，避免使用负角度
+        ParallelAnimation {
+            // 区域1：容器整体从0°旋转到180°，在中间点(90°)切换正背面可见性
+            SequentialAnimation {
+                // 第一阶段：0->90°，旧图（正面）逐渐翻转到侧面
+                NumberAnimation {
+                    target: quad1Container
+                    property: "rotationAngle"
+                    from: 0
+                    to: 90
+                    duration: transitionDuration / 2
+                    easing.type: Easing.InQuad
+                }
+                // 90°时切换可见性：旧图隐藏，新图显示
+                ScriptAction {
+                    script: {
+                        quadCurrent1.visible = false
+                        quadNext1.visible = true
+                    }
+                }
+                // 第二阶段：90°->180°，新图（背面）从侧面翻转到正面
+                NumberAnimation {
+                    target: quad1Container
+                    property: "rotationAngle"
+                    from: 90
+                    to: 180
+                    duration: transitionDuration / 2
+                    easing.type: Easing.OutQuad
+                }
+            }
+
+            // 区域2（延迟启动）
+            SequentialAnimation {
+                PauseAnimation { duration: transitionDuration * 0.08 }
+                NumberAnimation {
+                    target: quad2Container
+                    property: "rotationAngle"
+                    from: 0
+                    to: 90
+                    duration: transitionDuration / 2
+                    easing.type: Easing.InQuad
+                }
+                ScriptAction {
+                    script: {
+                        quadCurrent2.visible = false
+                        quadNext2.visible = true
+                    }
+                }
+                NumberAnimation {
+                    target: quad2Container
+                    property: "rotationAngle"
+                    from: 90
+                    to: 180
+                    duration: transitionDuration / 2
+                    easing.type: Easing.OutQuad
+                }
+            }
+
+            // 区域3（更多延迟）
+            SequentialAnimation {
+                PauseAnimation { duration: transitionDuration * 0.16 }
+                NumberAnimation {
+                    target: quad3Container
+                    property: "rotationAngle"
+                    from: 0
+                    to: 90
+                    duration: transitionDuration / 2
+                    easing.type: Easing.InQuad
+                }
+                ScriptAction {
+                    script: {
+                        quadCurrent3.visible = false
+                        quadNext3.visible = true
+                    }
+                }
+                NumberAnimation {
+                    target: quad3Container
+                    property: "rotationAngle"
+                    from: 90
+                    to: 180
+                    duration: transitionDuration / 2
+                    easing.type: Easing.OutQuad
+                }
+            }
+
+            // 区域4（最多延迟）
+            SequentialAnimation {
+                PauseAnimation { duration: transitionDuration * 0.24 }
+                NumberAnimation {
+                    target: quad4Container
+                    property: "rotationAngle"
+                    from: 0
+                    to: 90
+                    duration: transitionDuration / 2
+                    easing.type: Easing.InQuad
+                }
+                ScriptAction {
+                    script: {
+                        quadCurrent4.visible = false
+                        quadNext4.visible = true
+                    }
+                }
+                NumberAnimation {
+                    target: quad4Container
+                    property: "rotationAngle"
+                    from: 90
+                    to: 180
+                    duration: transitionDuration / 2
+                    easing.type: Easing.OutQuad
+                }
+            }
+        }
+
+        onRunningChanged: {
+            if (!running && transitioning) {
+                quadFlipContainer.visible = false
+                currentImageItem.visible = true
+                endTransition()
+            }
+        }
+
+        // 存储随机轴选择和方向的属性
+        property int quad1Axis: 0
+        property int quad2Axis: 0
+        property int quad3Axis: 0
+        property int quad4Axis: 0
+        property int quad1Direction: 1
+        property int quad2Direction: 1
+        property int quad3Direction: 1
+        property int quad4Direction: 1
+    }
+
+    // 3D百叶窗翻转动画 - 图片分成多个水平条带，每个条带独立翻转
+    SequentialAnimation {
+        id: venetianFlipAnimation
+
+        // 初始化百叶窗条带
+        ScriptAction {
+            script: {
+                // 随机决定翻转轴：X轴(上下翻)或Y轴(左右翻)
+                // 百叶窗通常更适合X轴翻转（像真实百叶窗一样上下翻转）
+                venetianFlipAnimation.bladeAxis = Math.random() > 0.3 ? 1 : 0  // 70%概率X轴翻转
+
+                // 随机决定每个条带的翻转方向
+                blade1Container.bladeDirection = Math.random() > 0.5 ? 1 : -1
+                blade2Container.bladeDirection = Math.random() > 0.5 ? 1 : -1
+                blade3Container.bladeDirection = Math.random() > 0.5 ? 1 : -1
+                blade4Container.bladeDirection = Math.random() > 0.5 ? 1 : -1
+
+                // 设置旋转轴 (X轴翻转为上下翻转，更符合百叶窗效果)
+                var axisX = venetianFlipAnimation.bladeAxis
+                var axisY = 1 - venetianFlipAnimation.bladeAxis
+                blade1Container.rotationAxis = Qt.vector3d(axisX, axisY, 0)
+                blade2Container.rotationAxis = Qt.vector3d(axisX, axisY, 0)
+                blade3Container.rotationAxis = Qt.vector3d(axisX, axisY, 0)
+                blade4Container.rotationAxis = Qt.vector3d(axisX, axisY, 0)
+
+                // 重置旋转角度
+                blade1Container.rotationAngle = 0
+                blade2Container.rotationAngle = 0
+                blade3Container.rotationAngle = 0
+                blade4Container.rotationAngle = 0
+
+                // 初始可见性
+                bladeCurrent1.visible = true
+                bladeCurrent2.visible = true
+                bladeCurrent3.visible = true
+                bladeCurrent4.visible = true
+                bladeNext1.visible = false
+                bladeNext2.visible = false
+                bladeNext3.visible = false
+                bladeNext4.visible = false
+
+                // 隐藏原图，显示百叶窗容器
+                currentImageItem.visible = false
+                venetianFlipContainer.visible = true
+            }
+        }
+
+        // 四个条带依次翻转（带错位延迟）
+        ParallelAnimation {
+            // 条带1（最上面）
+            SequentialAnimation {
+                NumberAnimation {
+                    target: blade1Container
+                    property: "rotationAngle"
+                    from: 0
+                    to: 90
+                    duration: transitionDuration / 2
+                    easing.type: Easing.InQuad
+                }
+                ScriptAction {
+                    script: {
+                        bladeCurrent1.visible = false
+                        bladeNext1.visible = true
+                    }
+                }
+                NumberAnimation {
+                    target: blade1Container
+                    property: "rotationAngle"
+                    from: 90
+                    to: 180
+                    duration: transitionDuration / 2
+                    easing.type: Easing.OutQuad
+                }
+            }
+
+            // 条带2
+            SequentialAnimation {
+                PauseAnimation { duration: transitionDuration * 0.1 }
+                NumberAnimation {
+                    target: blade2Container
+                    property: "rotationAngle"
+                    from: 0
+                    to: 90
+                    duration: transitionDuration / 2
+                    easing.type: Easing.InQuad
+                }
+                ScriptAction {
+                    script: {
+                        bladeCurrent2.visible = false
+                        bladeNext2.visible = true
+                    }
+                }
+                NumberAnimation {
+                    target: blade2Container
+                    property: "rotationAngle"
+                    from: 90
+                    to: 180
+                    duration: transitionDuration / 2
+                    easing.type: Easing.OutQuad
+                }
+            }
+
+            // 条带3
+            SequentialAnimation {
+                PauseAnimation { duration: transitionDuration * 0.2 }
+                NumberAnimation {
+                    target: blade3Container
+                    property: "rotationAngle"
+                    from: 0
+                    to: 90
+                    duration: transitionDuration / 2
+                    easing.type: Easing.InQuad
+                }
+                ScriptAction {
+                    script: {
+                        bladeCurrent3.visible = false
+                        bladeNext3.visible = true
+                    }
+                }
+                NumberAnimation {
+                    target: blade3Container
+                    property: "rotationAngle"
+                    from: 90
+                    to: 180
+                    duration: transitionDuration / 2
+                    easing.type: Easing.OutQuad
+                }
+            }
+
+            // 条带4（最下面）
+            SequentialAnimation {
+                PauseAnimation { duration: transitionDuration * 0.3 }
+                NumberAnimation {
+                    target: blade4Container
+                    property: "rotationAngle"
+                    from: 0
+                    to: 90
+                    duration: transitionDuration / 2
+                    easing.type: Easing.InQuad
+                }
+                ScriptAction {
+                    script: {
+                        bladeCurrent4.visible = false
+                        bladeNext4.visible = true
+                    }
+                }
+                NumberAnimation {
+                    target: blade4Container
+                    property: "rotationAngle"
+                    from: 90
+                    to: 180
+                    duration: transitionDuration / 2
+                    easing.type: Easing.OutQuad
+                }
+            }
+        }
+
+        onRunningChanged: {
+            if (!running && transitioning) {
+                venetianFlipContainer.visible = false
+                currentImageItem.visible = true
+                endTransition()
+            }
+        }
+
+        property int bladeAxis: 1  // 默认X轴翻转
+    }
+
+    // 四分屏容器 - 每个区域是一个双面卡片
+    Item {
+        id: quadFlipContainer
+        anchors.fill: parent
+        visible: false
+        z: 5
+
+        // 区域1：左上 - 双面卡片容器
+        Item {
+            id: quad1Container
+            x: 0
+            y: 0
+            width: parent.width / 2
+            height: parent.height / 2
+
+            // 旋转属性
+            property real rotationAngle: 0
+            property vector3d rotationAxis: Qt.vector3d(0, 1, 0)
+            property int rotationDirection: 1  // 1表示正向，-1表示反向（通过axis方向实现）
+
+            // 应用旋转变换（通过调整axis方向来实现正向/反向翻转）
+            transform: Rotation {
+                origin.x: quad1Container.width / 2
+                origin.y: quad1Container.height / 2
+                // axis乘以rotationDirection实现反向翻转
+                axis.x: quad1Container.rotationAxis.x * quad1Container.rotationDirection
+                axis.y: quad1Container.rotationAxis.y * quad1Container.rotationDirection
+                axis.z: quad1Container.rotationAxis.z * quad1Container.rotationDirection
+                angle: quad1Container.rotationAngle
+            }
+
+            // 正面：旧图左上（前半段可见）
+            ShaderEffectSource {
+                id: quadCurrent1
+                anchors.fill: parent
+                sourceItem: currentImageItem
+                sourceRect: Qt.rect(0, 0, currentImageItem.width / 2, currentImageItem.height / 2)
+                live: true
+            }
+
+            // 背面：新图左上（后半段可见，始终需要预处理翻转）
+            ShaderEffectSource {
+                id: quadNext1
+                anchors.fill: parent
+                sourceItem: nextImageItem
+                sourceRect: Qt.rect(0, 0, nextImageItem.width / 2, nextImageItem.height / 2)
+                live: true
+                visible: false
+                transform: Scale {
+                    // Y轴翻转时水平镜像，X轴翻转时垂直镜像（与旋转方向无关）
+                    xScale: quad1Container.rotationAxis.y > 0.5 ? -1 : 1
+                    yScale: quad1Container.rotationAxis.x > 0.5 ? -1 : 1
+                    origin.x: quadNext1.width / 2
+                    origin.y: quadNext1.height / 2
+                }
+            }
+        }
+
+        // 区域2：右上 - 双面卡片容器
+        Item {
+            id: quad2Container
+            x: parent.width / 2
+            y: 0
+            width: parent.width / 2
+            height: parent.height / 2
+
+            property real rotationAngle: 0
+            property vector3d rotationAxis: Qt.vector3d(0, 1, 0)
+            property int rotationDirection: 1
+
+            transform: Rotation {
+                origin.x: quad2Container.width / 2
+                origin.y: quad2Container.height / 2
+                axis.x: quad2Container.rotationAxis.x * quad2Container.rotationDirection
+                axis.y: quad2Container.rotationAxis.y * quad2Container.rotationDirection
+                axis.z: quad2Container.rotationAxis.z * quad2Container.rotationDirection
+                angle: quad2Container.rotationAngle
+            }
+
+            // 正面：旧图右上
+            ShaderEffectSource {
+                id: quadCurrent2
+                anchors.fill: parent
+                sourceItem: currentImageItem
+                sourceRect: Qt.rect(currentImageItem.width / 2, 0, currentImageItem.width / 2, currentImageItem.height / 2)
+                live: true
+            }
+
+            // 背面：新图右上
+            ShaderEffectSource {
+                id: quadNext2
+                anchors.fill: parent
+                sourceItem: nextImageItem
+                sourceRect: Qt.rect(nextImageItem.width / 2, 0, nextImageItem.width / 2, nextImageItem.height / 2)
+                live: true
+                visible: false
+                transform: Scale {
+                    xScale: quad2Container.rotationAxis.y > 0.5 ? -1 : 1
+                    yScale: quad2Container.rotationAxis.x > 0.5 ? -1 : 1
+                    origin.x: quadNext2.width / 2
+                    origin.y: quadNext2.height / 2
+                }
+            }
+        }
+
+        // 区域3：左下 - 双面卡片容器
+        Item {
+            id: quad3Container
+            x: 0
+            y: parent.height / 2
+            width: parent.width / 2
+            height: parent.height / 2
+
+            property real rotationAngle: 0
+            property vector3d rotationAxis: Qt.vector3d(0, 1, 0)
+            property int rotationDirection: 1
+
+            transform: Rotation {
+                origin.x: quad3Container.width / 2
+                origin.y: quad3Container.height / 2
+                axis.x: quad3Container.rotationAxis.x * quad3Container.rotationDirection
+                axis.y: quad3Container.rotationAxis.y * quad3Container.rotationDirection
+                axis.z: quad3Container.rotationAxis.z * quad3Container.rotationDirection
+                angle: quad3Container.rotationAngle
+            }
+
+            // 正面：旧图左下
+            ShaderEffectSource {
+                id: quadCurrent3
+                anchors.fill: parent
+                sourceItem: currentImageItem
+                sourceRect: Qt.rect(0, currentImageItem.height / 2, currentImageItem.width / 2, currentImageItem.height / 2)
+                live: true
+            }
+
+            // 背面：新图左下
+            ShaderEffectSource {
+                id: quadNext3
+                anchors.fill: parent
+                sourceItem: nextImageItem
+                sourceRect: Qt.rect(0, nextImageItem.height / 2, nextImageItem.width / 2, nextImageItem.height / 2)
+                live: true
+                visible: false
+                transform: Scale {
+                    xScale: quad3Container.rotationAxis.y > 0.5 ? -1 : 1
+                    yScale: quad3Container.rotationAxis.x > 0.5 ? -1 : 1
+                    origin.x: quadNext3.width / 2
+                    origin.y: quadNext3.height / 2
+                }
+            }
+        }
+
+        // 区域4：右下 - 双面卡片容器
+        Item {
+            id: quad4Container
+            x: parent.width / 2
+            y: parent.height / 2
+            width: parent.width / 2
+            height: parent.height / 2
+
+            property real rotationAngle: 0
+            property vector3d rotationAxis: Qt.vector3d(0, 1, 0)
+            property int rotationDirection: 1
+
+            transform: Rotation {
+                origin.x: quad4Container.width / 2
+                origin.y: quad4Container.height / 2
+                axis.x: quad4Container.rotationAxis.x * quad4Container.rotationDirection
+                axis.y: quad4Container.rotationAxis.y * quad4Container.rotationDirection
+                axis.z: quad4Container.rotationAxis.z * quad4Container.rotationDirection
+                angle: quad4Container.rotationAngle
+            }
+
+            // 正面：旧图右下
+            ShaderEffectSource {
+                id: quadCurrent4
+                anchors.fill: parent
+                sourceItem: currentImageItem
+                sourceRect: Qt.rect(currentImageItem.width / 2, currentImageItem.height / 2, currentImageItem.width / 2, currentImageItem.height / 2)
+                live: true
+            }
+
+            // 背面：新图右下
+            ShaderEffectSource {
+                id: quadNext4
+                anchors.fill: parent
+                sourceItem: nextImageItem
+                sourceRect: Qt.rect(nextImageItem.width / 2, nextImageItem.height / 2, nextImageItem.width / 2, nextImageItem.height / 2)
+                live: true
+                visible: false
+                transform: Scale {
+                    xScale: quad4Container.rotationAxis.y > 0.5 ? -1 : 1
+                    yScale: quad4Container.rotationAxis.x > 0.5 ? -1 : 1
+                    origin.x: quadNext4.width / 2
+                    origin.y: quadNext4.height / 2
+                }
+            }
+        }
+    }
+
+    // 3D百叶窗容器 - 图片分成4个水平条带，像百叶窗一样翻转
+    Item {
+        id: venetianFlipContainer
+        anchors.fill: parent
+        visible: false
+        z: 5
+
+        // 条带1：最上面（0-25%）
+        Item {
+            id: blade1Container
+            x: 0
+            y: 0
+            width: parent.width
+            height: parent.height / 4
+
+            property real rotationAngle: 0
+            property vector3d rotationAxis: Qt.vector3d(1, 0, 0)  // 默认X轴翻转
+            property int bladeDirection: 1
+
+            transform: Rotation {
+                origin.x: blade1Container.width / 2
+                origin.y: blade1Container.height / 2
+                axis.x: blade1Container.rotationAxis.x * blade1Container.bladeDirection
+                axis.y: blade1Container.rotationAxis.y * blade1Container.bladeDirection
+                axis.z: blade1Container.rotationAxis.z * blade1Container.bladeDirection
+                angle: blade1Container.rotationAngle
+            }
+
+            // 正面：旧图的上1/4
+            ShaderEffectSource {
+                id: bladeCurrent1
+                anchors.fill: parent
+                sourceItem: currentImageItem
+                sourceRect: Qt.rect(0, 0, currentImageItem.width, currentImageItem.height / 4)
+                live: true
+            }
+
+            // 背面：新图的上1/4（预处理翻转）
+            ShaderEffectSource {
+                id: bladeNext1
+                anchors.fill: parent
+                sourceItem: nextImageItem
+                sourceRect: Qt.rect(0, 0, nextImageItem.width, nextImageItem.height / 4)
+                live: true
+                visible: false
+                transform: Scale {
+                    xScale: blade1Container.rotationAxis.y > 0.5 ? -1 : 1
+                    yScale: blade1Container.rotationAxis.x > 0.5 ? -1 : 1
+                    origin.x: bladeNext1.width / 2
+                    origin.y: bladeNext1.height / 2
+                }
+            }
+        }
+
+        // 条带2：上中（25-50%）
+        Item {
+            id: blade2Container
+            x: 0
+            y: parent.height / 4
+            width: parent.width
+            height: parent.height / 4
+
+            property real rotationAngle: 0
+            property vector3d rotationAxis: Qt.vector3d(1, 0, 0)
+            property int bladeDirection: 1
+
+            transform: Rotation {
+                origin.x: blade2Container.width / 2
+                origin.y: blade2Container.height / 2
+                axis.x: blade2Container.rotationAxis.x * blade2Container.bladeDirection
+                axis.y: blade2Container.rotationAxis.y * blade2Container.bladeDirection
+                axis.z: blade2Container.rotationAxis.z * blade2Container.bladeDirection
+                angle: blade2Container.rotationAngle
+            }
+
+            // 正面：旧图的上中1/4
+            ShaderEffectSource {
+                id: bladeCurrent2
+                anchors.fill: parent
+                sourceItem: currentImageItem
+                sourceRect: Qt.rect(0, currentImageItem.height / 4, currentImageItem.width, currentImageItem.height / 4)
+                live: true
+            }
+
+            // 背面：新图的上中1/4
+            ShaderEffectSource {
+                id: bladeNext2
+                anchors.fill: parent
+                sourceItem: nextImageItem
+                sourceRect: Qt.rect(0, nextImageItem.height / 4, nextImageItem.width, nextImageItem.height / 4)
+                live: true
+                visible: false
+                transform: Scale {
+                    xScale: blade2Container.rotationAxis.y > 0.5 ? -1 : 1
+                    yScale: blade2Container.rotationAxis.x > 0.5 ? -1 : 1
+                    origin.x: bladeNext2.width / 2
+                    origin.y: bladeNext2.height / 2
+                }
+            }
+        }
+
+        // 条带3：下中（50-75%）
+        Item {
+            id: blade3Container
+            x: 0
+            y: parent.height / 2
+            width: parent.width
+            height: parent.height / 4
+
+            property real rotationAngle: 0
+            property vector3d rotationAxis: Qt.vector3d(1, 0, 0)
+            property int bladeDirection: 1
+
+            transform: Rotation {
+                origin.x: blade3Container.width / 2
+                origin.y: blade3Container.height / 2
+                axis.x: blade3Container.rotationAxis.x * blade3Container.bladeDirection
+                axis.y: blade3Container.rotationAxis.y * blade3Container.bladeDirection
+                axis.z: blade3Container.rotationAxis.z * blade3Container.bladeDirection
+                angle: blade3Container.rotationAngle
+            }
+
+            // 正面：旧图的下中1/4
+            ShaderEffectSource {
+                id: bladeCurrent3
+                anchors.fill: parent
+                sourceItem: currentImageItem
+                sourceRect: Qt.rect(0, currentImageItem.height / 2, currentImageItem.width, currentImageItem.height / 4)
+                live: true
+            }
+
+            // 背面：新图的下中1/4
+            ShaderEffectSource {
+                id: bladeNext3
+                anchors.fill: parent
+                sourceItem: nextImageItem
+                sourceRect: Qt.rect(0, nextImageItem.height / 2, nextImageItem.width, nextImageItem.height / 4)
+                live: true
+                visible: false
+                transform: Scale {
+                    xScale: blade3Container.rotationAxis.y > 0.5 ? -1 : 1
+                    yScale: blade3Container.rotationAxis.x > 0.5 ? -1 : 1
+                    origin.x: bladeNext3.width / 2
+                    origin.y: bladeNext3.height / 2
+                }
+            }
+        }
+
+        // 条带4：最下面（75-100%）
+        Item {
+            id: blade4Container
+            x: 0
+            y: parent.height * 3 / 4
+            width: parent.width
+            height: parent.height / 4
+
+            property real rotationAngle: 0
+            property vector3d rotationAxis: Qt.vector3d(1, 0, 0)
+            property int bladeDirection: 1
+
+            transform: Rotation {
+                origin.x: blade4Container.width / 2
+                origin.y: blade4Container.height / 2
+                axis.x: blade4Container.rotationAxis.x * blade4Container.bladeDirection
+                axis.y: blade4Container.rotationAxis.y * blade4Container.bladeDirection
+                axis.z: blade4Container.rotationAxis.z * blade4Container.bladeDirection
+                angle: blade4Container.rotationAngle
+            }
+
+            // 正面：旧图的下1/4
+            ShaderEffectSource {
+                id: bladeCurrent4
+                anchors.fill: parent
+                sourceItem: currentImageItem
+                sourceRect: Qt.rect(0, currentImageItem.height * 3 / 4, currentImageItem.width, currentImageItem.height / 4)
+                live: true
+            }
+
+            // 背面：新图的下1/4
+            ShaderEffectSource {
+                id: bladeNext4
+                anchors.fill: parent
+                sourceItem: nextImageItem
+                sourceRect: Qt.rect(0, nextImageItem.height * 3 / 4, nextImageItem.width, nextImageItem.height / 4)
+                live: true
+                visible: false
+                transform: Scale {
+                    xScale: blade4Container.rotationAxis.y > 0.5 ? -1 : 1
+                    yScale: blade4Container.rotationAxis.x > 0.5 ? -1 : 1
+                    origin.x: bladeNext4.width / 2
+                    origin.y: bladeNext4.height / 2
+                }
             }
         }
     }
