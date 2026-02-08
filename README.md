@@ -39,7 +39,7 @@
 
 ### 下载方式
 
-前往 [GitHub Releases](https://github.com/ABCCao/ImageDBManager/releases) 下载最新版本。
+前往 [GitHub Releases](https://github.com/CAO1975/ImageDBManager/releases) 下载最新版本。
 
 #### 方案一：便携版（推荐）
 **ImageDBManager-v1.0-Portable.exe** - 单文件便携版
@@ -61,7 +61,7 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/ABCCao/ImageDBManager.git
+git clone https://github.com/CAO1975/ImageDBManager.git
 cd ImageDBManager
 
 # 使用 Qt Creator 打开 CMakeLists.txt
