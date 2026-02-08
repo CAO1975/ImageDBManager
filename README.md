@@ -39,7 +39,7 @@
 
 ### 下载方式
 
-前往 [GitHub Releases](https://github.com/CAO1975/ImageDBManager/releases) 下载最新版本。
+前往 [GitHub Releases](https://github.com/CAO1975/ImageDBManager/tree/main/release) 下载最新版本。
 
 #### 方案一：便携版（推荐）
 **ImageDBManager-v1.0-Portable.exe** - 单文件便携版
